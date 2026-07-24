@@ -1,0 +1,123 @@
+{
+  "project_name": "PROPTO - Society Complaint & Ticket Management App",
+  "theme_strategy": "Light Theme Default (B2B SaaS Trust & Clarity). Employs Archetype 4 (Swiss & High-Contrast) for highly functional, data-dense layouts.",
+  "typography": {
+    "primary_font": "Cabinet Grotesk",
+    "primary_font_source": "@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700,400,900&display=swap');",
+    "secondary_font": "IBM Plex Sans",
+    "secondary_font_source": "@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');",
+    "heading_style": "font-cabinet font-bold tracking-tight text-gray-900",
+    "body_style": "font-ibm text-base leading-relaxed text-gray-700",
+    "rules": [
+      "No Inter, Roboto, or Open Sans for headings.",
+      "H1 up to text-5xl, H2 text-3xl, tracking-tight for all headings.",
+      "Labels and overlines must be Uppercase + text-xs + tracking-[0.2em]."
+    ]
+  },
+  "colors": {
+    "background": "#F8F9FA",
+    "surface": "#FFFFFF",
+    "border": "#E4E4E7",
+    "text_primary": "#09090B",
+    "text_secondary": "#71717A",
+    "brand_primary": "#18181B",
+    "brand_primary_foreground": "#FAFAFA",
+    "status": {
+      "open": {
+        "bg": "#EFF6FF",
+        "text": "#2563EB",
+        "border": "#BFDBFE"
+      },
+      "pending": {
+        "bg": "#FFFBEB",
+        "text": "#D97706",
+        "border": "#FDE68A"
+      },
+      "resolved": {
+        "bg": "#ECFDF5",
+        "text": "#059669",
+        "border": "#A7F3D0"
+      },
+      "escalated": {
+        "bg": "#FEF2F2",
+        "text": "#DC2626",
+        "border": "#FECACA"
+      },
+      "ai_generated": {
+        "bg": "#F0F9FF",
+        "text": "#0284C7",
+        "border": "#BAE6FD"
+      }
+    },
+    "rules": [
+      "No generic full-screen gradients.",
+      "Absolutely NO purple-on-white AI slop. Use precise, technical cyan/blue for AI actions.",
+      "Do NOT use complete transparent backgrounds for header, overlays, or dropdowns."
+    ]
+  },
+  "layouts": {
+    "dashboard": "High Density Grid (Mode B). grid-cols-1 md:grid-cols-3 lg:grid-cols-4 with gap-4 or gap-6.",
+    "sidebar": "Collapsible left navigation with 1px right border, bg-surface.",
+    "cards": "Grid Borders (The Technical Look). Flat backgrounds, 1px subtle border, no shadows. Nesting: child radii <= parent radii.",
+    "login": "Split screen layout. 50% form on stark white, 50% lifestyle architectural image with subtle grain."
+  },
+  "components": {
+    "buttons": "Pill-shaped or rounded-md. High contrast. Interaction: hover:bg-slate-800 transition: transform 0.2s ease, opacity 0.2s ease.",
+    "tables": "Dense rows. Left-aligned data. 1px borders. Highlight row on hover.",
+    "badges": "rounded-full px-2.5 py-0.5 text-xs font-medium. Use status colors strictly.",
+    "charts": "Use Recharts (via Shadcn if available). Accessible color palettes. Flat tooltips without shadows.",
+    "timeline": "Vertical left-bordered line with dot indicators for ticket history.",
+    "forms": "Use Shadcn components. Solid background inputs, subtle border. Never native inputs."
+  },
+  "visual_enhancers": {
+    "shadows": "Ambient + direct layered shadows ONLY for dropdowns/modals. Cards remain flat with borders.",
+    "surfaces": "Solid Backgrounds for clinical/functional apps. No Glassmorphism for data tables.",
+    "micro_interactions": "Hover states on all interactive elements. Slight lift (-translate-y-px) on card hover."
+  },
+  "icons": {
+    "library": "lucide-react",
+    "rules": "Use for functional UI only. Stroke width 1.5 or 2. Do not use AI emojis."
+  },
+  "image_urls": {
+    "login_hero": {
+      "url": "https://images.pexels.com/photos/18153132/pexels-photo-18153132.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Modern apartment building exterior in Berlin, representing high-end real estate and society living. Use as 50% screen cover in login."
+    },
+    "auth_alt": {
+      "url": "https://images.pexels.com/photos/2747599/pexels-photo-2747599.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Abstract minimalist concrete architecture. Great for alternative structural visual backgrounds."
+    }
+  },
+  "accessibility": {
+    "data_testid": "All interactive and key informational elements MUST include a data-testid attribute. Format: kebab-case, role-based. Example: data-testid='login-submit-button', data-testid='ticket-status-badge'."
+  },
+  "instructions_to_main_agent": [
+    "Initialize with Tailwind CSS and Shadcn UI (for .js environment, not .tsx).",
+    "Implement Cabinet Grotesk for headings and IBM Plex Sans for body.",
+    "Use Archetype 4 (Swiss & High Contrast): Stark black/white base with functional status colors.",
+    "Design dense, highly-scannable tables for Ticket and Resident management.",
+    "Construct the AI Activity Dashboard to feel like a 'command center' logs view—monospaced fonts for logs, strict grid, avoiding soft/playful AI tropes.",
+    "Ensure the Human-in-the-Loop (HITL) review queue uses distinct warning indicators for low-confidence scores.",
+    "Incorporate data-testid on every button, link, tab, and card."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this: make creative, distinctive frontends.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "You MUST NOT apply universal transition (e.g. transition: all). Add transitions for specific properties.",
+    "You MUST NOT center align the app container (.App { text-align: center; }).",
+    "NEVER use AI assistant Emoji characters (🤖🧠💭💡) for icons. Use lucide-react.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Use 2-3x more spacing than feels comfortable where applicable, except inside dense data tables.",
+    "Missing categories = main agent will use placeholder text which is FORBIDDEN. Use the provided image URLs.",
+    "Prioritize using pre-existing components from src/components/ui. Override Shadcn opinionated classes if they clip content.",
+    "Use `sonner` for toast notifications."
+  ],
+  "GENERAL UI UX DESIGN GUIDELINES": [
+    "Follow optical alignment over geometrical alignment.",
+    "Contrast ratios must meet APCA or WCAG AA standards (4.5:1 for normal text).",
+    "Focus states must have HIGHER contrast than default state.",
+    "Grid children MUST be direct children of grid containers.",
+    "Avoid fully transparent backgrounds for components with text overlays."
+  ]
+}
