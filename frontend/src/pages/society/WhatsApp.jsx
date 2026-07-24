@@ -1,0 +1,121 @@
+import { useState } from "react";
+import api, { apiError } from "@/lib/api";
+import { useScope, useFetch } from "@/lib/useScope";
+import { PageHeader } from "@/components/Layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import { Loader2, MessageSquare, Send, Wifi, WifiOff, CheckCircle2, XCircle, Bot } from "lucide-react";
+
+const SAMPLES = [
+  "Water is leaking heavily from the ceiling in flat B302, please send a plumber",
+  "The lift in Tower A is not working since morning, stuck at 3rd floor",
+  "No power supply in flat C204 since last night, please check urgently",
+  "Good morning everyone! Have a great day",
+];
+
+export default function WhatsApp() {
+  const cfg = useScope();
+  const { data: status, loading, reload } = useFetch("/society/whatsapp/status");
+  const [phone, setPhone] = useState("918111111102");
+  const [text, setText] = useState(SAMPLES[0]);
+  const [sending, setSending] = useState(false);
+  const [feed, setFeed] = useState([]);
+  const [groupName, setGroupName] = useState("");
+  const [groupId, setGroupId] = useState("");
+
+  const simulate = async () => {
+    if (!text.trim()) return;
+    setSending(true);
+    setFeed((f) => [{ dir: "in", phone, text, at: new Date() }, ...f]);
+    try {
+      const { data } = await api.post("/society/whatsapp/simulate", { phone, text }, cfg);
+      setFeed((f) => [{ dir: "sys", result: data, at: new Date() }, ...f]);
+      toast.success(`Pipeline: ${data.status}`);
+    } catch (e) { toast.error(apiError(e)); }
+    finally { setSending(false); }
+  };
+
+  const connect = async () => {
+    try { await api.post("/society/whatsapp/connect", { group_name: groupName, group_id: groupId }, cfg); toast.success("Group connected"); reload(); }
+    catch (e) { toast.error(apiError(e)); }
+  };
+  const toggleMon = async () => { try { await api.post("/society/whatsapp/toggle-monitoring", {}, cfg); reload(); } catch (e) { toast.error(apiError(e)); } };
+
+  return (
+    <div className="p-8">
+      <PageHeader title="WhatsApp Integration" subtitle="Group & Live Simulator" />
+      {loading || !status ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Group connection */}
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-card p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="overline">Society WhatsApp Group</p>
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${status.connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-100 text-zinc-500"}`}>
+                  {status.connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}{status.connected ? "Connected" : "Not connected"}
+                </span>
+              </div>
+              {status.connected ? (
+                <div className="space-y-3">
+                  <div className="rounded-md bg-secondary p-3 text-sm">
+                    <p className="font-medium">{status.group?.group_name}</p>
+                    <p className="font-mono text-xs text-zinc-400">{status.group?.group_id}</p>
+                  </div>
+                  <label className="flex items-center justify-between rounded-md border border-border p-3 text-sm">
+                    <span>Monitoring active</span>
+                    <Switch data-testid="toggle-monitoring" checked={status.monitoring} onCheckedChange={toggleMon} />
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div><Label className="text-xs">Group Name</Label><Input data-testid="group-name-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="mt-1" /></div>
+                  <div><Label className="text-xs">Group ID</Label><Input data-testid="group-id-input" value={groupId} onChange={(e) => setGroupId(e.target.value)} className="mt-1" /></div>
+                  <Button data-testid="connect-group-btn" onClick={connect} disabled={!groupName || !groupId} className="w-full">Connect Group</Button>
+                </div>
+              )}
+            </div>
+
+            <div className={`rounded-lg border p-4 text-sm ${status.api_configured ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+              <p className="flex items-center gap-2 font-medium">{status.api_configured ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-amber-600" />}
+                WhatsApp Cloud API {status.api_configured ? "configured" : "not configured"}</p>
+              <p className="mt-1 text-xs text-zinc-500">{status.api_configured ? "Live inbound webhook active at /api/webhook. Outbound messages send via Meta." : "Add WHATSAPP_TOKEN, WHATSAPP_PHONE_ID & WHATSAPP_APP_SECRET to backend .env to go live. Simulator works regardless."}</p>
+            </div>
+          </div>
+
+          {/* Simulator */}
+          <div className="rounded-lg border border-border bg-card p-5">
+            <p className="overline mb-4 flex items-center gap-2"><MessageSquare className="h-4 w-4" />Live Simulator</p>
+            <div className="space-y-3">
+              <div><Label className="text-xs">Resident Phone</Label><Input data-testid="sim-phone-input" value={phone} onChange={(e) => setPhone(e.target.value)} className="mt-1 font-mono" /></div>
+              <div><Label className="text-xs">Message</Label><Textarea data-testid="sim-text-input" value={text} onChange={(e) => setText(e.target.value)} rows={3} className="mt-1" /></div>
+              <div className="flex flex-wrap gap-1.5">
+                {SAMPLES.map((s, i) => <button key={i} onClick={() => setText(s)} className="rounded-full border border-border px-2.5 py-1 text-[11px] text-zinc-500 hover:bg-secondary">Sample {i + 1}</button>)}
+              </div>
+              <Button data-testid="sim-send-btn" onClick={simulate} disabled={sending} className="w-full">{sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send to Group</Button>
+            </div>
+
+            <div className="mt-5 max-h-[320px] space-y-2 overflow-y-auto border-t border-border pt-4">
+              {feed.length === 0 && <p className="text-center text-xs text-zinc-400">Send a message to watch the AI pipeline react.</p>}
+              {feed.map((m, i) => m.dir === "in" ? (
+                <div key={i} className="ml-auto max-w-[85%] rounded-lg rounded-tr-none bg-emerald-100 p-2.5 text-sm text-zinc-800">
+                  <p className="text-[10px] text-emerald-700">{m.phone}</p>{m.text}
+                </div>
+              ) : (
+                <div key={i} data-testid="sim-result" className="max-w-[90%] rounded-lg border border-border bg-secondary p-2.5 text-xs">
+                  <p className="flex items-center gap-1 font-medium text-sky-600"><Bot className="h-3.5 w-3.5" />PROPTO AI · {m.result.status.replace("_", " ")}</p>
+                  {m.result.ai && <p className="mt-1 text-zinc-500">{m.result.ai.category} · {m.result.ai.priority} · conf {(m.result.ai.confidence * 100).toFixed(0)}%</p>}
+                  {m.result.ticket_number && <p className="mt-0.5 font-mono text-emerald-600">{m.result.ticket_number}</p>}
+                  {m.result.reason && <p className="mt-0.5 text-zinc-400">{m.result.reason}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

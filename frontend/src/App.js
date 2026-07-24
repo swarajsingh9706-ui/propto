@@ -1,54 +1,64 @@
-import { useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { Toaster } from "sonner";
+import { Loader2 } from "lucide-react";
+import Layout from "@/components/Layout";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import Login from "@/pages/Login";
+import Societies from "@/pages/super/Societies";
+import SuperReports from "@/pages/super/SuperReports";
+import Dashboard from "@/pages/society/Dashboard";
+import Tickets from "@/pages/society/Tickets";
+import Vendors from "@/pages/society/Vendors";
+import Residents from "@/pages/society/Residents";
+import AIActivity from "@/pages/society/AIActivity";
+import ReviewQueue from "@/pages/society/ReviewQueue";
+import WhatsApp from "@/pages/society/WhatsApp";
+import Reports from "@/pages/society/Reports";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+function Protected({ children }) {
+  const { user } = useAuth();
+  if (user === null)
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+      </div>
+    );
+  if (!user) return <Navigate to="/login" replace />;
+  return <Layout>{children}</Layout>;
+}
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+function HomeRedirect() {
+  const { user } = useAuth();
+  if (user === null) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={user.role === "super_admin" ? "/super/societies" : "/dashboard"} replace />;
+}
 
 function App() {
   return (
     <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <Toaster position="top-right" richColors />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<HomeRedirect />} />
+            <Route path="/super/societies" element={<Protected><Societies /></Protected>} />
+            <Route path="/super/reports" element={<Protected><SuperReports /></Protected>} />
+            <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/tickets" element={<Protected><Tickets /></Protected>} />
+            <Route path="/vendors" element={<Protected><Vendors /></Protected>} />
+            <Route path="/residents" element={<Protected><Residents /></Protected>} />
+            <Route path="/ai-activity" element={<Protected><AIActivity /></Protected>} />
+            <Route path="/review-queue" element={<Protected><ReviewQueue /></Protected>} />
+            <Route path="/whatsapp" element={<Protected><WhatsApp /></Protected>} />
+            <Route path="/reports" element={<Protected><Reports /></Protected>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </div>
   );
 }

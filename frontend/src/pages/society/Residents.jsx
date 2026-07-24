@@ -1,0 +1,85 @@
+import { useRef, useState } from "react";
+import api, { apiError } from "@/lib/api";
+import { useScope, useFetch } from "@/lib/useScope";
+import { PageHeader } from "@/components/Layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { Plus, Loader2, Trash2, Upload, Users } from "lucide-react";
+
+const empty = { name: "", phone: "", flat: "", tower: "" };
+
+export default function Residents() {
+  const cfg = useScope();
+  const { data: residents, loading, reload } = useFetch("/society/residents");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef();
+
+  const create = async () => {
+    setSaving(true);
+    try { await api.post("/society/residents", form, cfg); toast.success("Resident added"); setOpen(false); setForm(empty); reload(); }
+    catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
+  };
+  const del = async (r) => { try { await api.delete(`/society/residents/${r.id}`); reload(); } catch (e) { toast.error(apiError(e)); } };
+  const importFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const { data } = await api.post("/society/residents/import", fd, { params: cfg.params, headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(`Imported ${data.inserted} residents`); reload();
+    } catch (err) { toast.error(apiError(err)); }
+    e.target.value = "";
+  };
+
+  return (
+    <div className="p-8">
+      <PageHeader title="Resident Management" subtitle="Residents">
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importFile} className="hidden" data-testid="import-file-input" />
+        <Button data-testid="import-residents-btn" variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-1.5 h-4 w-4" />Import Excel</Button>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild><Button data-testid="add-resident-btn"><Plus className="mr-1.5 h-4 w-4" />Add Resident</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle className="font-cabinet">New Resident</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2"><Label className="text-xs">Name</Label><Input data-testid="resident-name-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
+              <div className="col-span-2"><Label className="text-xs">Phone (with country code)</Label><Input data-testid="resident-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="918111111101" className="mt-1" /></div>
+              <div><Label className="text-xs">Flat</Label><Input data-testid="resident-flat-input" value={form.flat} onChange={(e) => setForm({ ...form, flat: e.target.value })} placeholder="B302" className="mt-1" /></div>
+              <div><Label className="text-xs">Tower</Label><Input value={form.tower} onChange={(e) => setForm({ ...form, tower: e.target.value })} placeholder="B" className="mt-1" /></div>
+            </div>
+            <DialogFooter><Button data-testid="save-resident-btn" onClick={create} disabled={saving || !form.name || !form.phone}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </PageHeader>
+
+      <p className="mb-4 text-xs text-zinc-400">Excel/CSV columns: <span className="font-mono">name, phone, flat, tower</span></p>
+
+      {loading ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : (residents || []).length === 0 ? (
+        <div className="rounded-lg border border-dashed p-12 text-center text-sm text-zinc-400"><Users className="mx-auto mb-3 h-8 w-8 text-zinc-300" />No residents yet.</div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border bg-secondary/50 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <tr><th className="px-5 py-3 font-medium">Name</th><th className="px-5 py-3 font-medium">Flat</th><th className="px-5 py-3 font-medium">Tower</th><th className="px-5 py-3 font-medium">Phone</th><th className="px-5 py-3"></th></tr>
+            </thead>
+            <tbody>
+              {residents.map((r) => (
+                <tr key={r.id} data-testid={`resident-row-${r.id}`} className="border-b border-border last:border-0 hover:bg-secondary/50">
+                  <td className="px-5 py-3 font-medium">{r.name}</td>
+                  <td className="px-5 py-3 text-zinc-600">{r.flat || "—"}</td>
+                  <td className="px-5 py-3 text-zinc-600">{r.tower || "—"}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-zinc-500">{r.phone}</td>
+                  <td className="px-5 py-3 text-right"><button data-testid={`delete-resident-${r.id}`} onClick={() => del(r)} className="text-zinc-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
