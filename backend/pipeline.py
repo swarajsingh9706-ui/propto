@@ -154,7 +154,16 @@ async def process_message(society_id: str, phone: str, text: str):
         await log_activity(society_id, phone, text, "ignored", reason=rule["reason"])
         return {"status": "ignored", "reason": rule["reason"]}
 
-    ai = await ai_engine.analyze_message(text)
+    try:
+        ai = await ai_engine.analyze_message(text)
+    except Exception as e:
+        logger.warning("AI analysis failed, routing to review queue: %s", e)
+        review = {"society_id": society_id, "phone": phone, "text": text,
+                  "ai_result": None, "confidence": 0, "resident_id": None,
+                  "status": "pending", "created_at": now_iso()}
+        await db.review_queue.insert_one(review)
+        await log_activity(society_id, phone, text, "review_queue", reason="AI unavailable")
+        return {"status": "review_queue", "confidence": 0, "reason": "AI temporarily unavailable"}
     if ai.get("intent") != "Complaint":
         await log_activity(society_id, phone, text, "ignored", ai=ai, reason="AI: not a complaint")
         return {"status": "ignored", "reason": "AI classified as not a complaint", "ai": ai}

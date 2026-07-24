@@ -31,7 +31,7 @@ async def login(body: LoginRequest, response: Response):
 
 
 @router.post("/logout")
-async def logout(response: Response, user: dict = Depends(get_current_user)):
+async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     return {"status": "ok"}
 
