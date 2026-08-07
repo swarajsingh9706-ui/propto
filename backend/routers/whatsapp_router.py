@@ -86,7 +86,9 @@ async def whapi_webhook(request: Request):
         society = None
         if group_chat_id:
             society = await db.societies.find_one({"whatsapp_group.chat_id": group_chat_id})
-        if not society:
+            if not society:
+                continue  # message from an unmapped group -> ignore
+        else:
             society = await db.societies.find_one({"monitoring": True})
         if not society:
             continue
