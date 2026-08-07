@@ -26,6 +26,22 @@ export default function WhatsApp() {
   const [feed, setFeed] = useState([]);
   const [groupName, setGroupName] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [conn, setConn] = useState(null);
+  const [testPhone, setTestPhone] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  const checkConn = async () => {
+    setConn("loading");
+    try { const { data } = await api.get("/society/whatsapp/check"); setConn(data); }
+    catch (e) { setConn({ ok: false, detail: apiError(e) }); }
+  };
+  const sendTest = async () => {
+    if (!testPhone.trim()) return;
+    setTesting(true);
+    try { await api.post("/society/whatsapp/test-send", { phone: testPhone.trim() }); toast.success("Test message sent — check WhatsApp"); }
+    catch (e) { toast.error(apiError(e)); }
+    finally { setTesting(false); }
+  };
 
   const simulate = async () => {
     if (!text.trim()) return;
@@ -83,6 +99,25 @@ export default function WhatsApp() {
               <p className="flex items-center gap-2 font-medium">{status.api_configured ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-amber-600" />}
                 WhatsApp Cloud API {status.api_configured ? "configured" : "not configured"}</p>
               <p className="mt-1 text-xs text-zinc-500">{status.api_configured ? "Live inbound webhook active at /api/webhook. Outbound messages send via Meta." : "Add WHATSAPP_TOKEN, WHATSAPP_PHONE_ID & WHATSAPP_APP_SECRET to backend .env to go live. Simulator works regardless."}</p>
+              {status.api_configured && (
+                <div className="mt-3 space-y-2 border-t border-emerald-200/60 pt-3">
+                  <div className="flex items-center gap-2">
+                    <Button data-testid="check-connection-btn" size="sm" variant="outline" onClick={checkConn} disabled={conn === "loading"}>
+                      {conn === "loading" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wifi className="mr-1.5 h-3.5 w-3.5" />}Test Connection
+                    </Button>
+                    {conn && conn !== "loading" && (conn.ok
+                      ? <span className="text-xs text-emerald-700">✓ {conn.phone?.verified_name} · {conn.phone?.display_phone_number} ({conn.phone?.quality_rating})</span>
+                      : <span className="text-xs text-red-600">✗ {typeof conn.detail === "string" ? conn.detail.slice(0, 80) : "failed"}</span>)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input data-testid="test-phone-input" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="Your number e.g. 9199..." className="h-8 flex-1 font-mono text-xs" />
+                    <Button data-testid="test-send-btn" size="sm" onClick={sendTest} disabled={testing || !testPhone}>
+                      {testing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}Send test
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-zinc-400">Recipient must be an added/verified number while your Meta app is in test mode.</p>
+                </div>
+              )}
             </div>
           </div>
 

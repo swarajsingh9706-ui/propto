@@ -118,6 +118,10 @@ class SimulateMessage(BaseModel):
     flat: Optional[str] = None
 
 
+class TestSend(BaseModel):
+    phone: str
+
+
 class GroupConnect(BaseModel):
     group_name: str
     group_id: str

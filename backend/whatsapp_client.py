@@ -47,6 +47,18 @@ async def send_text(phone: str, text: str) -> dict:
     })
 
 
+async def check_connection() -> dict:
+    if not is_configured():
+        return {"ok": False, "detail": "WhatsApp keys not configured"}
+    url = f"{GRAPH_URL}/{os.environ['WHATSAPP_PHONE_ID']}"
+    headers = {"Authorization": f"Bearer {os.environ['WHATSAPP_TOKEN']}"}
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(url, headers=headers, params={"fields": "display_phone_number,verified_name,quality_rating"})
+        if r.status_code == 200:
+            return {"ok": True, "phone": r.json()}
+        return {"ok": False, "detail": r.text, "status": r.status_code}
+
+
 async def send_buttons(phone: str, body: str, buttons: list) -> dict:
     """buttons: list of {'id': str, 'title': str} (max 3)"""
     return await _post({

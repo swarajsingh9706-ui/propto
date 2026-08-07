@@ -4,7 +4,7 @@ from bson import ObjectId
 import os
 
 from db import db
-from models import SimulateMessage, GroupConnect, now_iso
+from models import SimulateMessage, GroupConnect, TestSend, now_iso
 from auth_utils import require_society_admin, user_society_id, get_current_user
 import whatsapp_client as wa
 import pipeline
@@ -108,6 +108,22 @@ async def toggle_monitoring(society_id: str = None, user: dict = Depends(require
     new_val = not s.get("monitoring", False)
     await db.societies.update_one({"_id": ObjectId(sid)}, {"$set": {"monitoring": new_val}})
     return {"monitoring": new_val}
+
+
+@router.get("/api/society/whatsapp/check")
+async def wa_check(user: dict = Depends(require_society_admin)):
+    return await wa.check_connection()
+
+
+@router.post("/api/society/whatsapp/test-send")
+async def wa_test_send(body: TestSend, user: dict = Depends(require_society_admin)):
+    if not wa.is_configured():
+        raise HTTPException(status_code=400, detail="WhatsApp API not configured")
+    try:
+        res = await wa.send_text(body.phone, "✅ PROPTO is connected to this WhatsApp Business number. Live complaint monitoring is active.")
+        return {"ok": True, "response": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # -------- Simulator (test the full flow without live WhatsApp) --------
