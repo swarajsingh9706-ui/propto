@@ -62,12 +62,18 @@ async def _meta_post(payload: dict) -> dict:
         return r.json()
 
 
-async def send_text(to: str, text: str) -> dict:
+async def send_text(to: str, text: str, reply_to: str = None) -> dict:
     if whapi_configured():
-        return await _whapi_post("/messages/text", {"to": to, "body": text})
+        payload = {"to": to, "body": text}
+        if reply_to:
+            payload["quoted"] = reply_to
+        return await _whapi_post("/messages/text", payload)
     if meta_configured():
-        return await _meta_post({"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}})
-    logger.info("[WA-SIMULATED-OUTBOUND-TEXT] to=%s body=%s", to, text)
+        payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+        if reply_to:
+            payload["context"] = {"message_id": reply_to}
+        return await _meta_post(payload)
+    logger.info("[WA-SIMULATED-OUTBOUND-TEXT] to=%s reply_to=%s body=%s", to, reply_to, text)
     return {"simulated": True, "to": to, "body": text}
 
 
@@ -157,6 +163,7 @@ def parse_whapi_inbound(payload: dict):
             item = {
                 "from": strip_jid(sender or msg.get("from") or ""),
                 "group_chat_id": chat_id if is_group else None,
+                "id": msg.get("id"),
                 "type": msg.get("type"),
                 "text": "",
                 "button_id": None,

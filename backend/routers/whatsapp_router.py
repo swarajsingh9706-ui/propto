@@ -96,8 +96,8 @@ async def whapi_webhook(request: Request):
         if m.get("button_id"):
             await _handle_button(sid, m["from"], m["button_id"])
         elif group_chat_id and m.get("text"):
-            # group message -> AI complaint pipeline
-            await pipeline.process_message(sid, m["from"], m["text"])
+            # group message -> AI complaint pipeline; replies go back into the group, quoting the original
+            await pipeline.process_message(sid, m["from"], m["text"], group_chat_id=group_chat_id, reply_to=m.get("id"))
         elif m.get("text"):
             # 1:1 reply (vendor/resident) -> lightweight keyword handling
             await _handle_direct_reply(sid, m["from"], m["text"])

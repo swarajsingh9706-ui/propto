@@ -92,7 +92,8 @@ async def assign_vendor(ticket: dict, vendor: dict):
     )
 
 
-async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, raw_text: str, ai_generated: bool):
+async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, raw_text: str, ai_generated: bool,
+                        notify_to: str = None, notify_reply_to: str = None):
     doc = {
         "ticket_number": gen_ticket_number(),
         "society_id": society_id,
@@ -123,12 +124,18 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
     vendor = await pick_vendor(society_id, doc["category"])
     if vendor:
         await assign_vendor(doc, vendor)
-    if resident and resident.get("phone"):
-        await wa.send_text(
-            resident["phone"],
-            f"Ticket {doc['ticket_number']} created for your {doc['category']} complaint (Flat {doc['flat']}). "
-            + (f"Vendor {vendor['name']} assigned." if vendor else "A vendor will be assigned shortly."),
-        )
+    who = (resident["name"] + ", " if resident else "")
+    confirm_msg = (
+        f"✅ {who}we've logged your {doc['category']} complaint.\n"
+        f"Ticket: {doc['ticket_number']}\n"
+        f"Flat: {doc['flat'] or '—'}  |  Priority: {doc['priority']}\n"
+        + (f"Assigned to: {vendor['name']}. They'll reach out shortly." if vendor else "A vendor will be assigned shortly.")
+    )
+    # Prefer replying in the group (quoting the original message); else private 1:1 to resident.
+    if notify_to:
+        await wa.send_text(notify_to, confirm_msg, reply_to=notify_reply_to)
+    elif resident and resident.get("phone"):
+        await wa.send_text(resident["phone"], confirm_msg)
     return doc
 
 
@@ -147,8 +154,13 @@ async def log_activity(society_id: str, phone: str, text: str, decision: str, ai
     await db.ai_activity.insert_one(doc)
 
 
-async def process_message(society_id: str, phone: str, text: str):
-    """Main pipeline: rule filter -> AI -> confidence workflow. Returns result dict."""
+async def process_message(society_id: str, phone: str, text: str, group_chat_id: str = None, reply_to: str = None):
+    """Main pipeline: rule filter -> AI -> confidence workflow. Returns result dict.
+    When group_chat_id is set, all resident-facing replies go to the group (quoting the original message)."""
+    in_group = bool(group_chat_id)
+    reply_target = group_chat_id if in_group else phone
+    quote = reply_to if in_group else None
+
     rule = ai_engine.rule_filter(text)
     if not rule["forward"]:
         await log_activity(society_id, phone, text, "ignored", reason=rule["reason"])
@@ -180,11 +192,12 @@ async def process_message(society_id: str, phone: str, text: str):
             )
             await add_timeline(str(dup["_id"]), "Duplicate Linked", f"Another report from {phone}")
             await log_activity(society_id, phone, text, "duplicate", ai=ai, reason="Open ticket exists", ticket_number=dup["ticket_number"])
-            if phone:
-                await wa.send_text(phone, f"This is already tracked under ticket {dup['ticket_number']}. We'll keep you posted.")
+            if reply_target:
+                await wa.send_text(reply_target, f"This is already tracked under ticket {dup['ticket_number']}. We'll keep you posted.", reply_to=quote)
             return {"status": "duplicate", "ticket_number": dup["ticket_number"], "ai": ai}
 
-        ticket = await create_ticket(society_id, ai, resident, "whatsapp", text, ai_generated=True)
+        ticket = await create_ticket(society_id, ai, resident, "whatsapp", text, ai_generated=True,
+                                     notify_to=reply_target, notify_reply_to=quote)
         await log_activity(society_id, phone, text, "ticket_created", ai=ai, ticket_number=ticket["ticket_number"])
         return {"status": "ticket_created", "ticket_number": ticket["ticket_number"], "ai": ai}
 
@@ -201,7 +214,14 @@ async def process_message(society_id: str, phone: str, text: str):
     }
     await db.review_queue.insert_one(review)
     await log_activity(society_id, phone, text, "review_queue", ai=ai, reason=f"Low confidence {conf:.2f}")
-    if phone:
+    if in_group:
+        await wa.send_text(
+            reply_target,
+            f"Thanks — this looks like it may be a {ai.get('category') or 'maintenance'} complaint"
+            + (f" at Flat {ai.get('flat')}" if ai.get('flat') else "") + ". Our team will review and confirm shortly.",
+            reply_to=quote,
+        )
+    elif phone:
         await wa.send_buttons(
             phone,
             f"We detected a possible {ai.get('category') or 'maintenance'} complaint at Flat {ai.get('flat') or 'your unit'}. Create a ticket?",
