@@ -10,6 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Loader2, MessageSquare, Send, Wifi, WifiOff, CheckCircle2, XCircle, Bot } from "lucide-react";
 
+const WHAPI_WEBHOOK = `${process.env.REACT_APP_BACKEND_URL}/api/whapi/webhook`;
+
 const SAMPLES = [
   "Water is leaking heavily from the ceiling in flat B302, please send a plumber",
   "The lift in Tower A is not working since morning, stuck at 3rd floor",
@@ -89,16 +91,29 @@ export default function WhatsApp() {
               ) : (
                 <div className="space-y-3">
                   <div><Label className="text-xs">Group Name</Label><Input data-testid="group-name-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="mt-1" /></div>
-                  <div><Label className="text-xs">Group ID</Label><Input data-testid="group-id-input" value={groupId} onChange={(e) => setGroupId(e.target.value)} className="mt-1" /></div>
+                  <div><Label className="text-xs">Group Chat ID {status.whapi_configured && <span className="text-zinc-400">(Whapi, ends in @g.us)</span>}</Label><Input data-testid="group-id-input" value={groupId} onChange={(e) => setGroupId(e.target.value)} placeholder="120363xxxxxxxxx@g.us" className="mt-1 font-mono text-xs" /></div>
                   <Button data-testid="connect-group-btn" onClick={connect} disabled={!groupName || !groupId} className="w-full">Connect Group</Button>
+                  {status.whapi_configured && <p className="text-[10px] text-zinc-400">Get the chat ID from Whapi → GET /groups, or it auto-matches the first monitored group.</p>}
                 </div>
               )}
             </div>
 
             <div className={`rounded-lg border p-4 text-sm ${status.api_configured ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
               <p className="flex items-center gap-2 font-medium">{status.api_configured ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-amber-600" />}
-                WhatsApp Cloud API {status.api_configured ? "configured" : "not configured"}</p>
-              <p className="mt-1 text-xs text-zinc-500">{status.api_configured ? "Live inbound webhook active at /api/webhook. Outbound messages send via Meta." : "Add WHATSAPP_TOKEN, WHATSAPP_PHONE_ID & WHATSAPP_APP_SECRET to backend .env to go live. Simulator works regardless."}</p>
+                {status.provider === "whapi" ? "Whapi (Group Reader) connected" : status.provider === "meta" ? "WhatsApp Cloud API (Meta) configured" : "No transport configured"}</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {status.provider === "whapi"
+                  ? "Whapi reads your society GROUP and feeds messages to the AI engine. Point your Whapi channel webhook to the URL below."
+                  : status.provider === "meta"
+                  ? "1:1 inbound webhook active. Note: Meta Cloud API cannot read WhatsApp groups — add a WHAPI_TOKEN for group monitoring."
+                  : "Add WHAPI_TOKEN (group reading) or Meta keys to backend .env. Simulator works regardless."}
+              </p>
+              {status.whapi_configured && (
+                <div className="mt-2 rounded-md bg-white/60 p-2">
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Whapi webhook URL</p>
+                  <code className="block break-all text-[11px] text-zinc-700">{WHAPI_WEBHOOK}</code>
+                </div>
+              )}
               {status.api_configured && (
                 <div className="mt-3 space-y-2 border-t border-emerald-200/60 pt-3">
                   <div className="flex items-center gap-2">
@@ -106,7 +121,7 @@ export default function WhatsApp() {
                       {conn === "loading" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wifi className="mr-1.5 h-3.5 w-3.5" />}Test Connection
                     </Button>
                     {conn && conn !== "loading" && (conn.ok
-                      ? <span className="text-xs text-emerald-700">✓ {conn.phone?.verified_name} · {conn.phone?.display_phone_number} ({conn.phone?.quality_rating})</span>
+                      ? <span className="text-xs text-emerald-700">✓ {conn.provider === "whapi" ? `Whapi channel: ${typeof conn.state === "string" ? conn.state : "linked"}` : `${conn.phone?.verified_name} · ${conn.phone?.display_phone_number} (${conn.phone?.quality_rating})`}</span>
                       : <span className="text-xs text-red-600">✗ {typeof conn.detail === "string" ? conn.detail.slice(0, 80) : "failed"}</span>)}
                   </div>
                   <div className="flex items-center gap-2">
@@ -115,7 +130,7 @@ export default function WhatsApp() {
                       {testing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}Send test
                     </Button>
                   </div>
-                  <p className="text-[10px] text-zinc-400">Recipient must be an added/verified number while your Meta app is in test mode.</p>
+                  <p className="text-[10px] text-zinc-400">{status.provider === "whapi" ? "Sends from your linked Whapi number." : "Recipient must be an added/verified number while your Meta app is in test mode."}</p>
                 </div>
               )}
             </div>

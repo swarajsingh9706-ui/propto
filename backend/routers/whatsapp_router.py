@@ -35,7 +35,7 @@ async def receive_webhook(request: Request):
     if not wa.verify_signature(body, signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
     payload = await request.json()
-    messages = wa.parse_inbound(payload)
+    messages = wa.parse_meta_inbound(payload)
     for m in messages:
         phone_id = m.get("phone_number_id")
         society = await db.societies.find_one({"whatsapp_group.phone_number_id": phone_id}) if phone_id else None
@@ -76,6 +76,58 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
         await db.review_queue.update_many({"society_id": society_id, "phone": phone, "status": "pending"}, {"$set": {"status": "rejected", "reviewed_at": now_iso()}})
 
 
+# -------- Whapi Webhook (public) — reads real WhatsApp GROUP chats --------
+@router.post("/api/whapi/webhook")
+async def whapi_webhook(request: Request):
+    payload = await request.json()
+    messages = wa.parse_whapi_inbound(payload)
+    for m in messages:
+        group_chat_id = m.get("group_chat_id")
+        society = None
+        if group_chat_id:
+            society = await db.societies.find_one({"whatsapp_group.chat_id": group_chat_id})
+        if not society:
+            society = await db.societies.find_one({"monitoring": True})
+        if not society:
+            continue
+        sid = str(society["_id"])
+        if m.get("button_id"):
+            await _handle_button(sid, m["from"], m["button_id"])
+        elif group_chat_id and m.get("text"):
+            # group message -> AI complaint pipeline
+            await pipeline.process_message(sid, m["from"], m["text"])
+        elif m.get("text"):
+            # 1:1 reply (vendor/resident) -> lightweight keyword handling
+            await _handle_direct_reply(sid, m["from"], m["text"])
+    return {"status": "ok"}
+
+
+async def _handle_direct_reply(society_id: str, phone: str, text: str):
+    t = text.strip().lower()
+    vendor = await db.vendors.find_one({"society_id": society_id, "phone": {"$regex": phone[-10:] + "$"}})
+    if vendor:
+        job = await db.tickets.find_one({"vendor_id": str(vendor["_id"]), "status": {"$in": ["Open", "Pending"]}}, sort=[("updated_at", -1)])
+        if job:
+            tid = str(job["_id"])
+            if "accept" in t:
+                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"status": "Pending", "updated_at": now_iso()}})
+                await pipeline.add_timeline(tid, "Vendor Accepted", f"{vendor['name']} accepted via WhatsApp")
+                return
+            if "reject" in t:
+                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "updated_at": now_iso()}})
+                await pipeline.add_timeline(tid, "Vendor Rejected", f"{vendor['name']} rejected via WhatsApp")
+                return
+            if "resolve" in t or "done" in t or "complete" in t:
+                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"status": "Resolved", "updated_at": now_iso()}})
+                await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by {vendor['name']} via WhatsApp")
+                return
+    # resident confirm/cancel of a pending review
+    if "confirm" in t or "yes" in t:
+        await _handle_button(society_id, phone, "resident_confirm")
+    elif "cancel" in t or "no" in t:
+        await _handle_button(society_id, phone, "resident_cancel")
+
+
 # -------- Group management --------
 @router.get("/api/society/whatsapp/status")
 async def wa_status(society_id: str = None, user: dict = Depends(require_society_admin)):
@@ -86,6 +138,9 @@ async def wa_status(society_id: str = None, user: dict = Depends(require_society
         "group": s.get("whatsapp_group") if s else None,
         "monitoring": s.get("monitoring", False) if s else False,
         "api_configured": wa.is_configured(),
+        "provider": "whapi" if wa.whapi_configured() else ("meta" if wa.meta_configured() else None),
+        "whapi_configured": wa.whapi_configured(),
+        "meta_configured": wa.meta_configured(),
     }
 
 
@@ -95,6 +150,7 @@ async def wa_connect(body: GroupConnect, society_id: str = None, user: dict = De
     await db.societies.update_one(
         {"_id": ObjectId(sid)},
         {"$set": {"whatsapp_group": {"group_name": body.group_name, "group_id": body.group_id,
+                                     "chat_id": body.group_id,
                                      "phone_number_id": os.environ.get("WHATSAPP_PHONE_ID", "")},
                   "monitoring": True}},
     )
@@ -118,9 +174,9 @@ async def wa_check(user: dict = Depends(require_society_admin)):
 @router.post("/api/society/whatsapp/test-send")
 async def wa_test_send(body: TestSend, user: dict = Depends(require_society_admin)):
     if not wa.is_configured():
-        raise HTTPException(status_code=400, detail="WhatsApp API not configured")
+        raise HTTPException(status_code=400, detail="No WhatsApp transport configured")
     try:
-        res = await wa.send_text(body.phone, "✅ PROPTO is connected to this WhatsApp Business number. Live complaint monitoring is active.")
+        res = await wa.send_text(body.phone, "✅ PROPTO is connected. Live complaint monitoring is active.")
         return {"ok": True, "response": res}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
