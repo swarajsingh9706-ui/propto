@@ -37,10 +37,10 @@ export default function SocietyLogin() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <div className="flex w-full flex-col justify-center px-8 md:w-1/2 md:px-16 lg:px-24">
         <div className="mx-auto w-full max-w-sm">
-          <img src="/propto-logo.png" alt="Propto" className="mb-8 h-24 w-auto object-contain" />
+          <img src="/propto-logo.png" alt="Propto" className="mb-6 h-16 w-auto object-contain" />
 
           <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-brand-green/20 bg-brand-green/5 px-3 py-1 text-xs font-medium text-brand">
             <Building2 className="h-3.5 w-3.5" /> Society Admin
