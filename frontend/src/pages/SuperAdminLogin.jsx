@@ -5,7 +5,9 @@ import { apiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, ShieldCheck, ArrowRight, Terminal } from "lucide-react";
+import { ShieldCheck, Loader2, ArrowRight, Building2 } from "lucide-react";
+
+const HERO = "https://images.pexels.com/photos/18153132/pexels-photo-18153132.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";
 
 export default function SuperAdminLogin() {
   const { login, logout } = useAuth();
@@ -35,60 +37,62 @@ export default function SuperAdminLogin() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6" style={{ background: "#082E1B" }}>
-      {/* backdrop grid + gold glow */}
-      <div className="pointer-events-none absolute inset-0 opacity-[0.18]"
-        style={{ backgroundImage: "linear-gradient(rgba(198,160,44,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(198,160,44,0.5) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-gold/25 blur-[120px]" />
+    <div className="flex min-h-screen">
+      <div className="flex w-full flex-col justify-center px-8 md:w-1/2 md:px-16 lg:px-24">
+        <div className="mx-auto w-full max-w-sm">
+          <img src="/propto-logo.png" alt="Propto" className="mb-8 h-24 w-auto object-contain" />
 
-      <div className="relative z-10 w-full max-w-md">
-        <div className="mb-6 flex justify-center">
-          <div className="rounded-2xl bg-white/95 px-6 py-4 shadow-lg">
-            <img src="/propto-logo.png" alt="Propto" className="h-16 w-auto object-contain" />
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-brand-gold/25 bg-white/[0.04] p-8 backdrop-blur-xl">
-          <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-brand-gold/40 bg-brand-gold/10 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-brand-goldLight">
-            <ShieldCheck className="h-3.5 w-3.5" /> Super Admin Access
+          <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-brand-gold/40 bg-brand-gold/10 px-3 py-1 text-xs font-medium text-brand">
+            <ShieldCheck className="h-3.5 w-3.5" /> Super Admin
           </span>
-          <h1 className="mb-1 font-cabinet text-3xl font-bold tracking-tight text-white">Control Tower</h1>
-          <p className="mb-7 flex items-center gap-1.5 font-mono text-xs text-emerald-200/60">
-            <Terminal className="h-3.5 w-3.5" /> societies · vendors · analytics
-          </p>
+          <h1 className="mb-2 font-cabinet text-4xl font-bold tracking-tight text-brand">
+            Control Tower
+          </h1>
+          <p className="mb-8 text-sm text-zinc-500">Sign in to manage societies, vendors and platform analytics.</p>
 
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <Label htmlFor="email" className="text-emerald-100/70">Email</Label>
+              <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" data-testid="login-email-input"
                 value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="superadmin@propto.com"
-                className="mt-1.5 border-white/15 bg-black/20 text-white placeholder:text-emerald-200/30 focus-visible:ring-brand-gold" required />
+                placeholder="superadmin@propto.com" className="mt-1.5" required />
             </div>
             <div>
-              <Label htmlFor="password" className="text-emerald-100/70">Password</Label>
+              <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" data-testid="login-password-input"
                 value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="mt-1.5 border-white/15 bg-black/20 text-white placeholder:text-emerald-200/30 focus-visible:ring-brand-gold" required />
+                placeholder="••••••••" className="mt-1.5" required />
             </div>
-            {error && <p data-testid="login-error" className="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</p>}
-            <Button data-testid="login-submit-button" type="submit" disabled={loading}
-              className="w-full bg-brand-gold text-brand-greenDark hover:bg-brand-goldLight">
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Authenticate
+            {error && <p data-testid="login-error" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <Button data-testid="login-submit-button" type="submit" disabled={loading} className="w-full">
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign in
             </Button>
           </form>
 
           <button data-testid="demo-super-btn" onClick={() => { setEmail("superadmin@propto.com"); setPassword("Propto@123"); }}
-            className="mt-6 block w-full rounded-lg border border-dashed border-white/15 bg-black/20 p-3 text-left font-mono text-[11px] text-emerald-100/60 hover:border-brand-gold/40 hover:text-emerald-100">
-            <span className="text-brand-goldLight">// demo</span><br />→ superadmin@propto.com
+            className="mt-6 block w-full rounded-lg border border-dashed border-brand-gold/30 bg-brand-gold/[0.06] p-3 text-left text-xs text-zinc-600 hover:bg-brand-gold/[0.1]">
+            <span className="overline text-brand">Demo</span><br />→ superadmin@propto.com
           </button>
-        </div>
 
-        <Link to="/login" data-testid="goto-society-portal"
-          className="mt-6 flex items-center justify-center gap-1.5 text-xs font-medium text-emerald-200/50 hover:text-emerald-100">
-          <ArrowRight className="h-3 w-3 rotate-180" /> Society Admin? Sign in here
-        </Link>
+          <Link to="/login" data-testid="goto-society-portal"
+            className="mt-6 flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-brand">
+            <Building2 className="h-3.5 w-3.5" /> Society Admin? Sign in here <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="relative hidden w-1/2 md:block">
+        <img src={HERO} alt="Modern residential society" className="h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-brand-green/55" />
+        <div className="absolute bottom-12 left-12 right-12 text-white">
+          <div className="mb-4 h-1 w-16 rounded-full bg-brand-gold" />
+          <p className="font-cabinet text-3xl font-bold leading-tight tracking-tight">
+            One command center for every society you manage.
+          </p>
+          <p className="mt-3 max-w-md text-sm text-white/80">
+            Onboard societies, track vendor performance, and monitor complaint analytics across your entire portfolio.
+          </p>
+        </div>
       </div>
     </div>
   );
