@@ -49,12 +49,14 @@ async def find_duplicate(society_id: str, flat: str, category: str):
     })
 
 
-async def pick_vendor(society_id: str, category: str):
+async def pick_vendor(society_id: str, category: str, exclude_id: str = None):
     cursor = db.vendors.find({
         "society_id": society_id, "active": True, "availability": True,
         "categories": category,
     })
     vendors = await cursor.to_list(100)
+    if exclude_id:
+        vendors = [v for v in vendors if str(v["_id"]) != exclude_id]
     if not vendors:
         return None
     best, best_load = None, None

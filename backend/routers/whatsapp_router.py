@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from fastapi.responses import PlainTextResponse
 from bson import ObjectId
 import os
+import logging
 
 from db import db
 from models import SimulateMessage, GroupConnect, TestSend, now_iso
@@ -10,6 +11,7 @@ import whatsapp_client as wa
 import pipeline
 
 router = APIRouter(tags=["whatsapp"])
+logger = logging.getLogger("propto.whatsapp_router")
 
 
 def _sid(user):
@@ -51,29 +53,89 @@ async def receive_webhook(request: Request):
     return {"status": "ok"}
 
 
+async def _ack(phone: str, text: str):
+    try:
+        await wa.send_text(phone, text)
+    except Exception as e:
+        logger.warning("ack send failed: %s", e)
+
+
+async def _notify_followers(ticket: dict, text: str):
+    """Post an update to the origin group (quoting the complaint) or DM the resident."""
+    gid = ticket.get("group_chat_id")
+    try:
+        if gid:
+            await wa.send_text(gid, text, reply_to=ticket.get("origin_message_id"))
+        elif ticket.get("resident_phone"):
+            await wa.send_text(ticket["resident_phone"], text)
+    except Exception as e:
+        logger.warning("follower notify failed: %s", e)
+
+
+async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
+    try:
+        ticket = await db.tickets.find_one({"_id": ObjectId(tid)})
+    except Exception:
+        ticket = None
+    if not ticket:
+        logger.info("vendor_action: ticket %s not found", tid)
+        return
+    vname = ticket.get("vendor_name") or "The vendor"
+    flat = ticket.get("flat") or "—"
+    num = ticket.get("ticket_number")
+    cat = ticket.get("category")
+
+    if action == "accept":
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Pending", "vendor_accepted": True, "awaiting_vendor_time": False, "updated_at": now_iso()}})
+        await pipeline.add_timeline(tid, "Vendor Accepted", f"{vname} accepted the job")
+        await _ack(phone, f"👍 Thanks! You've *accepted* {num} ({cat} · Flat {flat}). Please visit and reply *DONE* once resolved.")
+        await _notify_followers(ticket, f"👷 {vname} accepted {num} and will attend to the {cat} issue at Flat {flat} shortly.")
+
+    elif action == "reject":
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "awaiting_vendor_time": False, "updated_at": now_iso()}})
+        await pipeline.add_timeline(tid, "Vendor Rejected", f"{vname} declined the job")
+        await _ack(phone, f"No problem — you've *declined* {num}. We'll reassign it.")
+        fresh = await db.tickets.find_one({"_id": ticket["_id"]})
+        newv = await pipeline.pick_vendor(society_id, cat, exclude_id=str(ticket.get("vendor_id")) if ticket.get("vendor_id") else None)
+        if newv:
+            await pipeline.assign_vendor(fresh, newv)
+            await _notify_followers(ticket, f"🔄 {num} is being reassigned to {newv['name']}.")
+        else:
+            await _notify_followers(ticket, f"⏳ {num} needs reassignment — our team will assign another vendor shortly.")
+
+    elif action == "resolve":
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Resolved", "awaiting_vendor_time": False, "updated_at": now_iso()}})
+        await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by {vname}")
+        await _ack(phone, f"✅ Marked {num} as *resolved*. Thank you!")
+        await _notify_followers(ticket, f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}. We'd love your feedback!")
+
+    elif action == "time":
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"awaiting_vendor_time": True, "updated_at": now_iso()}})
+        await pipeline.add_timeline(tid, "Vendor: Suggesting Time", f"{vname} will propose a visit time")
+        await _ack(phone, f"🕒 Sure — please reply with your preferred visit time for {num} (e.g. \"Tomorrow 4 PM\").")
+
+
 async def _handle_button(society_id: str, phone: str, button_id: str):
+    logger.info("button click phone=%s id=%s", phone, button_id)
     if button_id.startswith("vendor_accept_"):
-        tid = button_id.replace("vendor_accept_", "")
-        await db.tickets.update_one({"_id": ObjectId(tid)}, {"$set": {"status": "Pending", "updated_at": now_iso()}})
-        await pipeline.add_timeline(tid, "Vendor Accepted", f"{phone} accepted the job")
+        await _vendor_action(society_id, phone, button_id.replace("vendor_accept_", ""), "accept")
     elif button_id.startswith("vendor_reject_"):
-        tid = button_id.replace("vendor_reject_", "")
-        await db.tickets.update_one({"_id": ObjectId(tid)}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "updated_at": now_iso()}})
-        await pipeline.add_timeline(tid, "Vendor Rejected", f"{phone} rejected; needs reassignment")
+        await _vendor_action(society_id, phone, button_id.replace("vendor_reject_", ""), "reject")
+    elif button_id.startswith("vendor_time_"):
+        await _vendor_action(society_id, phone, button_id.replace("vendor_time_", ""), "time")
     elif button_id.startswith("vendor_resolved_"):
-        tid = button_id.replace("vendor_resolved_", "")
-        await db.tickets.update_one({"_id": ObjectId(tid)}, {"$set": {"status": "Resolved", "updated_at": now_iso()}})
-        await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by vendor {phone}")
+        await _vendor_action(society_id, phone, button_id.replace("vendor_resolved_", ""), "resolve")
     elif button_id == "resident_confirm":
         item = await db.review_queue.find_one({"society_id": society_id, "phone": phone, "status": "pending"}, sort=[("created_at", -1)])
         if item:
             ai = dict(item.get("ai_result") or {})
             ai["intent"] = "Complaint"
             resident = await pipeline.find_resident(society_id, phone=phone, flat=ai.get("flat"))
-            ticket = await pipeline.create_ticket(society_id, ai, resident, "resident_confirm", item.get("text", ""), ai_generated=True)
+            ticket = await pipeline.create_ticket(society_id, ai, resident, "resident_confirm", item.get("text", ""), ai_generated=True, notify_to=phone)
             await db.review_queue.update_one({"_id": item["_id"]}, {"$set": {"status": "approved", "ticket_number": ticket["ticket_number"], "reviewed_at": now_iso()}})
     elif button_id == "resident_cancel":
         await db.review_queue.update_many({"society_id": society_id, "phone": phone, "status": "pending"}, {"$set": {"status": "rejected", "reviewed_at": now_iso()}})
+        await _ack(phone, "No problem — we won't create a ticket. Message us again anytime you need help.")
 
 
 # -------- Whapi Webhook (public) — reads real WhatsApp GROUP chats --------
@@ -81,6 +143,7 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
 async def whapi_webhook(request: Request):
     payload = await request.json()
     messages = wa.parse_whapi_inbound(payload)
+    logger.info("Whapi inbound: %d parsed msg(s): %s", len(messages), [{"from": m.get("from"), "group": bool(m.get("group_chat_id")), "btn": m.get("button_id"), "text": (m.get("text") or "")[:40]} for m in messages])
     for m in messages:
         group_chat_id = m.get("group_chat_id")
         society = None
@@ -112,21 +175,20 @@ async def _handle_direct_reply(society_id: str, phone: str, text: str):
         if job:
             tid = str(job["_id"])
             if "accept" in t:
-                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"status": "Pending", "updated_at": now_iso()}})
-                await pipeline.add_timeline(tid, "Vendor Accepted", f"{vendor['name']} accepted via WhatsApp")
+                await _vendor_action(society_id, phone, tid, "accept"); return
+            if "reject" in t or "decline" in t:
+                await _vendor_action(society_id, phone, tid, "reject"); return
+            if "resolve" in t or t == "done" or "complete" in t or "finished" in t:
+                await _vendor_action(society_id, phone, tid, "resolve"); return
+            if job.get("awaiting_vendor_time"):
+                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"preferred_time": text.strip(), "awaiting_vendor_time": False, "updated_at": now_iso()}})
+                await pipeline.add_timeline(tid, "Vendor Suggested Time", f"{vendor['name']}: {text.strip()}")
+                await _ack(phone, f"🕒 Noted — visit time for {job.get('ticket_number')} set to \"{text.strip()}\".")
+                await _notify_followers(job, f"🕒 {vendor['name']} proposed a visit time for {job.get('ticket_number')}: {text.strip()}.")
                 return
-            if "reject" in t:
-                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "updated_at": now_iso()}})
-                await pipeline.add_timeline(tid, "Vendor Rejected", f"{vendor['name']} rejected via WhatsApp")
-                return
-            if "resolve" in t or "done" in t or "complete" in t:
-                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"status": "Resolved", "updated_at": now_iso()}})
-                await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by {vendor['name']} via WhatsApp")
-                return
-    # resident confirm/cancel of a pending review
-    if "confirm" in t or "yes" in t:
+    if "confirm" in t or t == "yes":
         await _handle_button(society_id, phone, "resident_confirm")
-    elif "cancel" in t or "no" in t:
+    elif "cancel" in t or t == "no":
         await _handle_button(society_id, phone, "resident_cancel")
 
 

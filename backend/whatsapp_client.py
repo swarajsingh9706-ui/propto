@@ -63,38 +63,46 @@ async def _meta_post(payload: dict) -> dict:
 
 
 async def send_text(to: str, text: str, reply_to: str = None) -> dict:
-    if whapi_configured():
-        payload = {"to": to, "body": text}
-        if reply_to:
-            payload["quoted"] = reply_to
-        return await _whapi_post("/messages/text", payload)
-    if meta_configured():
-        payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
-        if reply_to:
-            payload["context"] = {"message_id": reply_to}
-        return await _meta_post(payload)
+    try:
+        if whapi_configured():
+            payload = {"to": to, "body": text}
+            if reply_to:
+                payload["quoted"] = reply_to
+            return await _whapi_post("/messages/text", payload)
+        if meta_configured():
+            payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+            if reply_to:
+                payload["context"] = {"message_id": reply_to}
+            return await _meta_post(payload)
+    except Exception as e:
+        logger.error("send_text delivery failed to=%s: %s", to, e)
+        return {"error": str(e), "delivered": False}
     logger.info("[WA-SIMULATED-OUTBOUND-TEXT] to=%s reply_to=%s body=%s", to, reply_to, text)
     return {"simulated": True, "to": to, "body": text}
 
 
 async def send_buttons(to: str, body: str, buttons: list) -> dict:
-    """buttons: list of {'id': str, 'title': str} (max 3)"""
-    if whapi_configured():
-        try:
-            return await _whapi_post("/messages/interactive", {
-                "to": to, "type": "button", "body": {"text": body},
-                "action": {"buttons": [{"type": "quick_reply", "title": b["title"][:20], "id": b["id"]} for b in buttons[:3]]},
+    """buttons: list of {'id': str, 'title': str} (max 3). Best-effort; never raises."""
+    try:
+        if whapi_configured():
+            try:
+                return await _whapi_post("/messages/interactive", {
+                    "to": to, "type": "button", "body": {"text": body},
+                    "action": {"buttons": [{"type": "quick_reply", "title": b["title"][:20], "id": b["id"]} for b in buttons[:3]]},
+                })
+            except Exception as e:
+                logger.warning("Whapi interactive failed (%s), falling back to text", e)
+                opts = " / ".join(b["title"] for b in buttons)
+                return await send_text(to, f"{body}\n\nReply with: {opts}")
+        if meta_configured():
+            return await _meta_post({
+                "messaging_product": "whatsapp", "to": to, "type": "interactive",
+                "interactive": {"type": "button", "body": {"text": body},
+                                "action": {"buttons": [{"type": "reply", "reply": {"id": b["id"], "title": b["title"][:20]}} for b in buttons[:3]]}},
             })
-        except Exception as e:
-            logger.warning("Whapi interactive failed (%s), falling back to text", e)
-            opts = " / ".join(b["title"] for b in buttons)
-            return await send_text(to, f"{body}\n\nReply with: {opts}")
-    if meta_configured():
-        return await _meta_post({
-            "messaging_product": "whatsapp", "to": to, "type": "interactive",
-            "interactive": {"type": "button", "body": {"text": body},
-                            "action": {"buttons": [{"type": "reply", "reply": {"id": b["id"], "title": b["title"][:20]}} for b in buttons[:3]]}},
-        })
+    except Exception as e:
+        logger.error("send_buttons delivery failed to=%s: %s", to, e)
+        return {"error": str(e), "delivered": False}
     logger.info("[WA-SIMULATED-OUTBOUND-BUTTONS] to=%s body=%s buttons=%s", to, body, buttons)
     return {"simulated": True, "to": to, "body": body, "buttons": buttons}
 
@@ -182,6 +190,14 @@ def parse_whapi_inbound(payload: dict):
                 br = (inter.get("button_reply") or {})
                 item["button_id"] = br.get("id")
                 item["text"] = br.get("title", "")
+            elif mtype == "action":
+                act = msg.get("action") or {}
+                item["button_id"] = act.get("id")
+                item["text"] = act.get("title", "")
+            elif mtype == "button":
+                b = msg.get("button") or {}
+                item["button_id"] = b.get("id") or b.get("payload")
+                item["text"] = b.get("text", "")
             if item["text"] or item["button_id"]:
                 out.append(item)
     except Exception as e:
