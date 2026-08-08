@@ -5,7 +5,8 @@ import { Toaster } from "sonner";
 import { Loader2 } from "lucide-react";
 import Layout from "@/components/Layout";
 
-import Login from "@/pages/Login";
+import Login from "@/pages/SocietyLogin";
+import SuperAdminLogin from "@/pages/SuperAdminLogin";
 import Societies from "@/pages/super/Societies";
 import SuperReports from "@/pages/super/SuperReports";
 import Dashboard from "@/pages/society/Dashboard";
@@ -44,6 +45,7 @@ function App() {
           <Toaster position="top-right" richColors />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/admin/login" element={<SuperAdminLogin />} />
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/super/societies" element={<Protected><Societies /></Protected>} />
             <Route path="/super/reports" element={<Protected><SuperReports /></Protected>} />
