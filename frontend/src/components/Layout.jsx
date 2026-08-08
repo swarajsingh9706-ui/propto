@@ -36,21 +36,18 @@ export default function Layout({ children }) {
   return (
     <div className="flex min-h-screen">
       <aside className="fixed left-0 top-0 z-20 flex h-screen w-60 flex-col border-r border-border bg-card">
-        <div className="flex items-center gap-2 border-b border-border px-6 py-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900">
-            <span className="font-cabinet text-sm font-black text-white">P</span>
-          </div>
-          <div>
-            <p className="font-cabinet text-lg font-bold leading-none tracking-tight">PROPTO</p>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-400">Complaint OS</p>
-          </div>
+        <div className="border-b border-border px-6 py-5">
+          <img src="/propto-logo.png" alt="Propto" className="mx-auto h-20 w-auto object-contain" />
+          <p className="mt-1 text-center text-[10px] uppercase tracking-[0.25em] text-brand-gold">
+            {isSuper ? "Control Tower" : "Society Portal"}
+          </p>
         </div>
 
         {scoped && (
           <button
             data-testid="exit-scope-btn"
             onClick={exitScope}
-            className="mx-4 mt-4 flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-100"
+            className="mx-4 mt-4 flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-2 text-xs font-medium text-brand hover:bg-accent"
           >
             <ChevronLeft className="h-3.5 w-3.5" /> All Societies
           </button>
@@ -64,7 +61,7 @@ export default function Layout({ children }) {
               data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-secondary"
+                  isActive ? "bg-brand-green text-white" : "text-zinc-600 hover:bg-secondary"
                 }`
               }
             >
@@ -78,7 +75,7 @@ export default function Layout({ children }) {
           <div className="mb-3">
             <p className="truncate text-sm font-medium text-zinc-900">{user?.name}</p>
             <p className="truncate text-xs text-zinc-400">{user?.email}</p>
-            <span className="mt-1 inline-block rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            <span className="mt-1 inline-block rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-brand">
               {isSuper ? "Super Admin" : "Society Admin"}
             </span>
           </div>
@@ -98,7 +95,7 @@ export function PageHeader({ title, subtitle, children }) {
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div>
         <p className="overline mb-1">{subtitle}</p>
-        <h1 className="font-cabinet text-3xl font-bold tracking-tight text-zinc-900">{title}</h1>
+        <h1 className="font-cabinet text-3xl font-bold tracking-tight text-brand">{title}</h1>
       </div>
       <div className="flex items-center gap-2">{children}</div>
     </div>

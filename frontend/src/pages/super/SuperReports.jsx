@@ -28,7 +28,7 @@ export default function SuperReports() {
                 <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="category" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="count" fill="#18181B" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" fill="#0C4428" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -40,7 +40,7 @@ export default function SuperReports() {
               {vendor_performance.map((v, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <span className="w-32 truncate text-sm">{v.vendor}</span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${v.rate}%` }} /></div>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-brand-green" style={{ width: `${v.rate}%` }} /></div>
                   <span className="w-24 text-right text-xs text-zinc-500">{v.resolved}/{v.assigned} · {v.rate}%</span>
                 </div>
               ))}

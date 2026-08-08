@@ -10,8 +10,8 @@ body {
     font-family: "IBM Plex Sans", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #F8F9FA;
-    color: #09090B;
+    background-color: #FAF8F3;
+    color: #0B2A1C;
 }
 
 code, .font-mono {
@@ -20,25 +20,25 @@ code, .font-mono {
 
 @layer base {
     :root {
-        --background: 0 0% 97.3%;
-        --foreground: 240 10% 3.9%;
+        --background: 44 33% 96%;
+        --foreground: 155 45% 10%;
         --card: 0 0% 100%;
-        --card-foreground: 240 10% 3.9%;
+        --card-foreground: 155 45% 10%;
         --popover: 0 0% 100%;
-        --popover-foreground: 240 10% 3.9%;
-        --primary: 240 6% 10%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 240 4.8% 95.9%;
-        --secondary-foreground: 240 6% 10%;
-        --muted: 240 4.8% 95.9%;
-        --muted-foreground: 240 4% 46%;
-        --accent: 240 4.8% 95.9%;
-        --accent-foreground: 240 6% 10%;
-        --destructive: 0 84.2% 60.2%;
+        --popover-foreground: 155 45% 10%;
+        --primary: 152 72% 15%;
+        --primary-foreground: 45 60% 97%;
+        --secondary: 150 16% 94%;
+        --secondary-foreground: 152 45% 15%;
+        --muted: 150 16% 94%;
+        --muted-foreground: 150 8% 40%;
+        --accent: 45 50% 90%;
+        --accent-foreground: 152 45% 15%;
+        --destructive: 0 72% 48%;
         --destructive-foreground: 0 0% 98%;
-        --border: 240 5.9% 90%;
-        --input: 240 5.9% 90%;
-        --ring: 240 6% 10%;
+        --border: 150 14% 87%;
+        --input: 150 14% 87%;
+        --ring: 152 72% 15%;
         --radius: 0.5rem;
     }
 }
@@ -60,23 +60,29 @@ code, .font-mono {
     font-size: 0.6875rem;
     letter-spacing: 0.2em;
     font-weight: 600;
-    color: #71717A;
+    color: #6b7d72;
 }
 
+.text-gold { color: #C6A02C; }
+.bg-gold { background-color: #C6A02C; }
+.border-gold { border-color: #C6A02C; }
+.text-brand { color: #0C4428; }
+.bg-brand { background-color: #0C4428; }
+
 ::selection {
-    background: #09090B;
+    background: #0C4428;
     color: #fff;
 }
 
 .card-hover {
-    transition: transform 0.2s ease, border-color 0.2s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .card-hover:hover {
     transform: translateY(-1px);
-    border-color: #a1a1aa;
+    border-color: #C6A02C;
+    box-shadow: 0 6px 20px -12px rgba(12, 68, 40, 0.35);
 }
 
-/* thin scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #c9cfc9; border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

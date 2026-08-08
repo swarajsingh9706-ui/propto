@@ -26,8 +26,8 @@ export default function AIActivity() {
         <StatCard testid="ai-stat-ignored" label="Ignored" value={stats.ignored} icon={EyeOff} accent="text-zinc-400" />
       </div>
 
-      <div className="mt-6 rounded-lg border border-border bg-zinc-950 p-5">
-        <p className="mb-4 font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">// processing logs</p>
+      <div className="mt-6 rounded-lg border border-border bg-brand-greenDark p-5">
+        <p className="mb-4 font-mono text-xs uppercase tracking-[0.2em] text-brand-gold">// processing logs</p>
         <div className="max-h-[500px] space-y-2 overflow-y-auto font-mono text-xs">
           {logs.length === 0 ? <p className="text-zinc-600">No activity yet. Send a message via the WhatsApp simulator.</p> : logs.map((l) => {
             const d = DECISION[l.decision] || { label: l.decision, cls: "text-zinc-400" };

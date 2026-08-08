@@ -7,7 +7,7 @@ import {
 import { Loader2, Ticket, Wrench, Users, Building2, CheckCircle2, Clock, AlertTriangle, Bot } from "lucide-react";
 import { StatusBadge, PriorityBadge } from "@/components/Badges";
 
-const COLORS = ["#2563EB", "#D97706", "#059669", "#DC2626", "#0284C7", "#7c3aed", "#0891b2"];
+const COLORS = ["#0C4428", "#C6A02C", "#2F8F5B", "#E4C767", "#0A5C39", "#9C7D24", "#146B42"];
 
 export default function Dashboard() {
   const { data, loading } = useFetch("/society/dashboard");
@@ -36,7 +36,7 @@ export default function Dashboard() {
                 <XAxis dataKey="category" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="count" fill="#18181B" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill="#0C4428" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

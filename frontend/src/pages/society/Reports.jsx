@@ -29,7 +29,7 @@ export default function Reports() {
             <XAxis dataKey="date" tick={{ fontSize: 11 }} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-            <Line type="monotone" dataKey="count" stroke="#18181B" strokeWidth={2} dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="count" stroke="#0C4428" strokeWidth={2} dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -43,7 +43,7 @@ export default function Reports() {
                 <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="category" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="count" fill="#18181B" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" fill="#0C4428" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -56,7 +56,7 @@ export default function Reports() {
                 <XAxis dataKey="category" tick={{ fontSize: 10 }} angle={-25} textAnchor="end" height={60} interval={0} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="hours" fill="#0284C7" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="hours" fill="#C6A02C" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

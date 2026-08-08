@@ -40,20 +40,12 @@ export default function SocietyLogin() {
     <div className="flex min-h-screen">
       <div className="flex w-full flex-col justify-center px-8 md:w-1/2 md:px-16 lg:px-24">
         <div className="mx-auto w-full max-w-sm">
-          <div className="mb-10 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-600">
-              <span className="font-cabinet text-base font-black text-white">P</span>
-            </div>
-            <div>
-              <p className="font-cabinet text-xl font-bold leading-none tracking-tight">PROPTO</p>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-600">Society Portal</p>
-            </div>
-          </div>
+          <img src="/propto-logo.png" alt="Propto" className="mb-8 h-24 w-auto object-contain" />
 
-          <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+          <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-brand-green/20 bg-brand-green/5 px-3 py-1 text-xs font-medium text-brand">
             <Building2 className="h-3.5 w-3.5" /> Society Admin
           </span>
-          <h1 className="mb-2 font-cabinet text-4xl font-bold tracking-tight text-zinc-900">
+          <h1 className="mb-2 font-cabinet text-4xl font-bold tracking-tight text-brand">
             Manage your society
           </h1>
           <p className="mb-8 text-sm text-zinc-500">Sign in to handle complaints, tickets, vendors and residents.</p>
@@ -72,18 +64,18 @@ export default function SocietyLogin() {
                 placeholder="••••••••" className="mt-1.5" required />
             </div>
             {error && <p data-testid="login-error" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-            <Button data-testid="login-submit-button" type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700">
+            <Button data-testid="login-submit-button" type="submit" disabled={loading} className="w-full">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign in
             </Button>
           </form>
 
           <button data-testid="demo-society-btn" onClick={() => { setEmail("admin@greenvalley.com"); setPassword("Admin@123"); }}
-            className="mt-6 block w-full rounded-lg border border-dashed border-emerald-200 bg-emerald-50/50 p-3 text-left text-xs text-zinc-600 hover:bg-emerald-50">
-            <span className="overline text-emerald-600">Demo</span><br />→ admin@greenvalley.com
+            className="mt-6 block w-full rounded-lg border border-dashed border-brand-green/25 bg-brand-green/[0.04] p-3 text-left text-xs text-zinc-600 hover:bg-brand-green/[0.08]">
+            <span className="overline text-brand">Demo</span><br />→ admin@greenvalley.com
           </button>
 
           <Link to="/admin/login" data-testid="goto-super-portal"
-            className="mt-6 flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-900">
+            className="mt-6 flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-brand">
             <Shield className="h-3.5 w-3.5" /> Super Admin? Go to Control Tower <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
@@ -91,13 +83,14 @@ export default function SocietyLogin() {
 
       <div className="relative hidden w-1/2 md:block">
         <img src={HERO} alt="Modern residential society" className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-emerald-950/40" />
+        <div className="absolute inset-0 bg-brand-green/55" />
         <div className="absolute bottom-12 left-12 right-12 text-white">
+          <div className="mb-4 h-1 w-16 rounded-full bg-brand-gold" />
           <p className="font-cabinet text-3xl font-bold leading-tight tracking-tight">
             Every complaint, handled — before it becomes a crisis.
           </p>
           <p className="mt-3 max-w-md text-sm text-white/80">
-            Residents raise issues on WhatsApp. PROPTO detects, tickets, and routes them to the right vendor automatically.
+            Residents raise issues on WhatsApp. Propto detects, tickets, and routes them to the right vendor automatically.
           </p>
         </div>
       </div>
