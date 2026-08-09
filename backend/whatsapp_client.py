@@ -191,6 +191,16 @@ def parse_whapi_inbound(payload: dict):
     (we own the poll), so vote tallies flow back in."""
     out = []
     try:
+        for upd in payload.get("messages_updates", []):
+            au = upd.get("after_update") or {}
+            poll = au.get("poll")
+            if poll:
+                cid = au.get("chat_id", "") or ""
+                out.append({
+                    "from": "", "group_chat_id": cid if cid.endswith("@g.us") else None,
+                    "id": au.get("id") or upd.get("id"), "type": "poll",
+                    "poll": poll, "poll_update": {}, "from_me": True,
+                })
         for msg in payload.get("messages", []):
             chat_id = msg.get("chat_id", "")
             is_group = chat_id.endswith("@g.us")

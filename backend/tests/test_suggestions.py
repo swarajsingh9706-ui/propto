@@ -228,6 +228,95 @@ class TestTitleFallbackAndBackfill:
         assert found["yes_votes"] == 3 and found["no_votes"] == 2, found
 
 
+class TestMessagesUpdatesIngest:
+    """PRIMARY BUG FIX: Whapi delivers real poll vote tallies via top-level
+    'messages_updates' array with after_update.poll.results (NOT 'messages')."""
+
+    def _mu_payload(self, s, y, n):
+        pmid = s["poll_message_id"]
+        return {
+            "messages_updates": [{
+                "id": pmid,
+                "after_update": {
+                    "id": pmid,
+                    "type": "poll",
+                    "chat_id": "120363000@g.us",
+                    "poll": {
+                        "title": f"{s['title']} — Do you support this?",
+                        "options": ["Yes", "No"],
+                        "results": [
+                            {"name": "Yes", "count": y, "voters": []},
+                            {"name": "No", "count": n, "voters": []},
+                        ],
+                    },
+                },
+            }],
+            "event": {"type": "messages", "event": "patch"},
+        }
+
+    def _get(self, soc_h, sid):
+        g = requests.get(f"{API}/society/suggestions", headers=soc_h, timeout=15)
+        assert g.status_code == 200
+        return next(x for x in g.json()["suggestions"] if x["id"] == sid)
+
+    def test_messages_updates_updates_votes(self, soc_h, created_ids):
+        s = _create(soc_h, created_ids)
+        r = requests.post(f"{API}/whapi/webhook", json=self._mu_payload(s, 2, 0), timeout=20)
+        assert r.status_code == 200, r.text
+        found = self._get(soc_h, s["id"])
+        assert found["yes_votes"] == 2 and found["no_votes"] == 0, found
+
+    def test_messages_updates_second_overwrites_absolute(self, soc_h, created_ids):
+        s = _create(soc_h, created_ids)
+        r1 = requests.post(f"{API}/whapi/webhook", json=self._mu_payload(s, 2, 0), timeout=20)
+        assert r1.status_code == 200
+        r2 = requests.post(f"{API}/whapi/webhook", json=self._mu_payload(s, 3, 4), timeout=20)
+        assert r2.status_code == 200
+        found = self._get(soc_h, s["id"])
+        assert found["yes_votes"] == 3 and found["no_votes"] == 4, found
+
+    def test_legacy_messages_shape_still_works(self, soc_h, created_ids):
+        s = _create(soc_h, created_ids)
+        pmid = s["poll_message_id"]
+        payload = {"messages": [{
+            "id": pmid, "type": "poll", "from_me": True, "chat_id": "120363000@g.us",
+            "poll": {"results": [{"name": "Yes", "count": 9}, {"name": "No", "count": 1}]},
+        }]}
+        r = requests.post(f"{API}/whapi/webhook", json=payload, timeout=20)
+        assert r.status_code == 200
+        found = self._get(soc_h, s["id"])
+        assert found["yes_votes"] == 9 and found["no_votes"] == 1, found
+
+    def test_messages_updates_unknown_id_ignored(self, soc_h, created_ids):
+        # baseline: set known suggestion to 2/0 via messages_updates
+        s = _create(soc_h, created_ids)
+        r0 = requests.post(f"{API}/whapi/webhook", json=self._mu_payload(s, 2, 0), timeout=20)
+        assert r0.status_code == 200
+
+        # send unknown id in messages_updates
+        payload = {
+            "messages_updates": [{
+                "id": f"unknown-{uuid.uuid4().hex}",
+                "after_update": {
+                    "id": f"unknown-{uuid.uuid4().hex}",
+                    "type": "poll",
+                    "chat_id": "120363000@g.us",
+                    "poll": {
+                        "title": f"NOPE_{uuid.uuid4().hex} — Do you support this?",
+                        "results": [{"name": "Yes", "count": 77}, {"name": "No", "count": 77}],
+                    },
+                },
+            }],
+            "event": {"type": "messages", "event": "patch"},
+        }
+        r = requests.post(f"{API}/whapi/webhook", json=payload, timeout=20)
+        assert r.status_code == 200, r.text
+
+        # known suggestion untouched
+        found = self._get(soc_h, s["id"])
+        assert found["yes_votes"] == 2 and found["no_votes"] == 0, found
+
+
 class TestManualAndStatus:
     def test_manual_vote_increments(self, soc_h, created_ids):
         s = _create(soc_h, created_ids)

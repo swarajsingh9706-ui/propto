@@ -1,0 +1,21 @@
+{
+  "summary": "Backend re-verification of the PRIMARY BUG FIX: Whapi poll vote tallies arrive via top-level 'messages_updates' array (with after_update.poll.results), not 'messages'. Extended /app/backend/tests/test_suggestions.py with a new TestMessagesUpdatesIngest class (4 new cases). All 16/16 backend tests pass in 5.67s. Verified end-to-end: (a) POST /api/whapi/webhook with a messages_updates payload containing after_update.poll.results updates the target suggestion's yes_votes/no_votes (Yes=2,No=0). (b) A second messages_updates for the same id with Yes=3,No=4 OVERWRITES (absolute, not additive) to yes=3/no=4. (c) Legacy 'messages' poll shape still works — payload with messages[0].poll.results Yes=9,No=1 correctly sets yes=9/no=1. (d) Unknown poll id inside messages_updates is safely ignored (200 OK) and does not mutate the pre-set known suggestion (still yes=2/no=0). Regressions verified: manual dashboard vote POST /api/society/suggestions/{id}/vote still increments; PUT status update still works; GET /api/society/suggestions stats totals still match sum of yes+no across suggestions; POST/PUT/PATCH methods on /api/whapi/webhook all return 200; title-fallback + poll_message_id backfill still work. Setup used admin@greenvalley.com / Admin@123; poll_message_id was returned as 'local-<uuid>' as expected on the 402 Whapi plan and was echoed back inside webhook payloads for exact-id matching. All TEST_Sug_* suggestions auto-cleaned by module-scope teardown fixture; Green Valley demo data untouched.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_suggestions.py",
+    "/app/test_reports/pytest/suggestions_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "parse_whapi_inbound now handles both payload['messages'] and payload['messages_updates'] — good. Consider also handling nested 'messages_updates' under payload['event'] or Whapi's alternate 'poll_updates' key if their webhook contract ever changes; current implementation is aligned with the observed real webhook shape."
+  ],
+  "updated_files": ["/app/backend/tests/test_suggestions.py"],
+  "success_rate": { "backend": "100% (16/16)", "frontend": "not tested (backend-only request)" },
+  "seed_data_creation": "All TEST_Sug_* suggestions created during the run were auto-deleted by the module-scope teardown fixture; only the pre-existing Green Valley demo suggestions remain.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@greenvalley.com / Admin@123 (society admin) — working",
+  "context_for_next_testing_agent": "test_suggestions.py now has 16 cases across 6 classes: TestSuggestionCreate, TestPollWebhookIngest (legacy messages shape), TestPollWebhookMethods (POST/PUT/PATCH acceptance), TestTitleFallbackAndBackfill, TestMessagesUpdatesIngest (NEW — messages_updates + after_update.poll.results + unknown-id ignore + legacy compat), TestManualAndStatus, TestListStats. To simulate a real Whapi poll vote, POST /api/whapi/webhook (no auth) with {\"messages_updates\":[{\"id\":<poll_message_id>,\"after_update\":{\"id\":<poll_message_id>,\"type\":\"poll\",\"chat_id\":\"...@g.us\",\"poll\":{\"title\":\"...\",\"results\":[{\"name\":\"Yes\",\"count\":N},{\"name\":\"No\",\"count\":M}]}}}]}. Counts are ABSOLUTE (overwrite, not additive). poll_message_id is 'local-<uuid>' in this env (402 Whapi plan) — expected.",
+  "rca_of_the_issue": "Real Whapi vote deliveries put poll tallies in a top-level 'messages_updates' array where each item has after_update.poll.results[].count. The old parser only read payload['messages'], so those updates were silently dropped and yes_votes/no_votes stayed at 0/0. Fix in whatsapp_client.parse_whapi_inbound: also iterate payload.get('messages_updates', []) and build a synthetic poll item from after_update (id, chat_id, poll.results). _apply_poll_results then exact-id matches by poll_message_id and writes absolute Yes/No counts. Verified by 4 new tests hitting the real /api/whapi/webhook endpoint."
+}
