@@ -1,0 +1,22 @@
+{
+  "summary": "Focused verification of the Resident Suggestions bug fix (WhatsApp poll vote ingestion). Backend: 7/7 pytest cases pass in /app/backend/tests/test_suggestions.py — auth, create returns non-null poll_message_id (local-<uuid> as expected on 402 Whapi plan), /api/whapi/webhook with a matching poll_message_id updates yes_votes/no_votes to absolute values from poll.results (5/3 then 8/1 confirmed absolute-not-additive), unknown message-id webhooks return 200 and do not mutate other suggestions, manual dashboard vote increments yes_votes by 1, PUT status -> GET reflects, GET returns {suggestions, stats} with stats.total_votes == sum of yes+no across suggestions. Frontend Playwright: society admin login -> nav-suggestions loads Suggestions page with all four stat cards (sg-total, sg-review, sg-approved, sg-votes), filter tabs, suggestion cards with vote bars and Yes/No buttons; add-suggestion dialog creates a new suggestion which appears immediately; vote-yes-<id> increments UI from 0 -> 1; status-<id> Select updates to Approved and the badge reflects it; delete cleans up. No console errors. All created test data cleaned up.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_suggestions.py",
+    "/app/test_reports/pytest/suggestions_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_apply_poll_results treats yes/no==None as 0 when only one side is present; that is intentional given absolute-count semantics, but note it means a webhook that omits an option will zero it out. Current test env sends both, so behaviour is correct.",
+    "suggestions_router.create_suggestion never raises when Whapi returns 402 — it falls back to a local-<uuid> poll_message_id. Good defensive design; keep it."
+  ],
+  "updated_files": ["/app/backend/tests/test_suggestions.py"],
+  "success_rate": { "backend": "100% (7/7)", "frontend": "100% (all critical flows passed)" },
+  "seed_data_creation": "All TEST_* suggestions were auto-deleted by the pytest module-scope teardown and the UI test explicitly deleted its created suggestion. No residual demo data.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@greenvalley.com / Admin@123 (society admin) — confirmed working",
+  "context_for_next_testing_agent": "Suggestions regression tests live in /app/backend/tests/test_suggestions.py and run in ~4s. To simulate a poll vote, POST /api/whapi/webhook (no auth) with {messages:[{id:<poll_message_id>, type:'poll', from_me:true, chat_id:'<any>@g.us', poll:{results:[{name:'Yes',count:N},{name:'No',count:M}]}}]}. Poll updates are absolute (overwrite), not additive.",
+  "rca_of_the_issue": "Original bug had two parts: (a) messages were sent as a text-with-buttons question instead of a native WhatsApp poll, and (b) group votes never came back to the backend. Fix now uses Whapi POST /messages/poll (send_poll) to send a native poll and stores the returned message id (or a local- fallback on 402 plans). /api/whapi/webhook now recognises type==poll (or a poll field) and routes to _apply_poll_results, which finds the suggestion by poll_message_id and overwrites yes_votes/no_votes from poll.results counts. Verified end-to-end via 7 backend tests + Playwright UI."
+}

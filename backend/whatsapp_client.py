@@ -62,6 +62,34 @@ async def _meta_post(payload: dict) -> dict:
         return r.json()
 
 
+async def send_poll(to: str, title: str, options: list, count: int = 1) -> dict:
+    """Send a native WhatsApp poll. Best-effort; never raises."""
+    try:
+        if whapi_configured():
+            return await _whapi_post("/messages/poll", {"to": to, "title": title, "options": options, "count": count})
+        if meta_configured():
+            return await send_buttons(to, title, [{"id": "poll_" + o.lower(), "title": o} for o in options[:3]])
+    except Exception as e:
+        logger.error("send_poll failed to=%s: %s", to, e)
+        return {"error": str(e), "delivered": False}
+    logger.info("[WA-SIMULATED-POLL] to=%s title=%s options=%s", to, title, options)
+    return {"simulated": True}
+
+
+def poll_message_id_from(resp) -> str:
+    if not isinstance(resp, dict) or resp.get("error") or resp.get("simulated"):
+        return None
+    m = resp.get("message") or {}
+    if m.get("id"):
+        return m["id"]
+    if resp.get("id"):
+        return resp["id"]
+    msgs = resp.get("messages") or []
+    if isinstance(msgs, list) and msgs:
+        return msgs[0].get("id")
+    return None
+
+
 async def send_text(to: str, text: str, reply_to: str = None) -> dict:
     try:
         if whapi_configured():
@@ -159,47 +187,48 @@ parse_inbound = parse_meta_inbound
 
 
 def parse_whapi_inbound(payload: dict):
-    """Return list of {from, text, group_chat_id, button_id, from_me}."""
+    """Return list of message items. Poll results are included even when from_me
+    (we own the poll), so vote tallies flow back in."""
     out = []
     try:
         for msg in payload.get("messages", []):
-            if msg.get("from_me"):
-                continue
             chat_id = msg.get("chat_id", "")
             is_group = chat_id.endswith("@g.us")
             sender = msg.get("participant") if is_group else chat_id
-            item = {
+            mtype = msg.get("type")
+            base = {
                 "from": strip_jid(sender or msg.get("from") or ""),
                 "group_chat_id": chat_id if is_group else None,
                 "id": msg.get("id"),
-                "type": msg.get("type"),
+                "type": mtype,
                 "text": "",
                 "button_id": None,
-                "from_me": False,
+                "from_me": bool(msg.get("from_me")),
             }
-            mtype = msg.get("type")
+            if mtype in ("poll", "poll_update") or msg.get("poll") or msg.get("poll_update"):
+                base["poll"] = msg.get("poll") or {}
+                base["poll_update"] = msg.get("poll_update") or {}
+                base["type"] = "poll"
+                out.append(base)
+                continue
+            if msg.get("from_me"):
+                continue
             if mtype == "text":
-                item["text"] = (msg.get("text") or {}).get("body", "")
+                base["text"] = (msg.get("text") or {}).get("body", "")
             elif mtype == "reply":
-                reply = msg.get("reply") or {}
-                br = reply.get("buttons_reply") or {}
-                item["button_id"] = br.get("id")
-                item["text"] = br.get("title", "")
+                br = (msg.get("reply") or {}).get("buttons_reply") or {}
+                base["button_id"] = br.get("id"); base["text"] = br.get("title", "")
             elif mtype == "interactive":
-                inter = msg.get("interactive") or {}
-                br = (inter.get("button_reply") or {})
-                item["button_id"] = br.get("id")
-                item["text"] = br.get("title", "")
+                br = (msg.get("interactive") or {}).get("button_reply") or {}
+                base["button_id"] = br.get("id"); base["text"] = br.get("title", "")
             elif mtype == "action":
                 act = msg.get("action") or {}
-                item["button_id"] = act.get("id")
-                item["text"] = act.get("title", "")
+                base["button_id"] = act.get("id"); base["text"] = act.get("title", "")
             elif mtype == "button":
                 b = msg.get("button") or {}
-                item["button_id"] = b.get("id") or b.get("payload")
-                item["text"] = b.get("text", "")
-            if item["text"] or item["button_id"]:
-                out.append(item)
+                base["button_id"] = b.get("id") or b.get("payload"); base["text"] = b.get("text", "")
+            if base["text"] or base["button_id"]:
+                out.append(base)
     except Exception as e:
         logger.warning("parse_whapi_inbound error: %s", e)
     return out

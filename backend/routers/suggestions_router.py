@@ -50,23 +50,23 @@ async def create_suggestion(body: SuggestionCreate, society_id: str = None, user
         "society_id": sid, "title": body.title, "category": body.category or "General",
         "author_name": body.author_name or "Admin", "flat": body.flat or "",
         "status": "Under Review", "voters": {}, "yes_votes": 0, "no_votes": 0,
-        "poll_posted": False, "created_at": now_iso(), "updated_at": now_iso(),
+        "poll_posted": False, "poll_message_id": None, "created_at": now_iso(), "updated_at": now_iso(),
     }
     res = await db.suggestions.insert_one(doc)
-    sug_id = str(res.inserted_id)
     gid = ((society or {}).get("whatsapp_group") or {}).get("chat_id")
+    poll_msg_id = None
     posted = False
     if gid:
-        r = await wa.send_buttons(
-            gid,
-            f"📢 New community suggestion:\n\n\"{body.title}\"\n\nDo you support this? Cast your vote 👇",
-            [{"id": f"sugg_yes_{sug_id}", "title": "👍 Yes"}, {"id": f"sugg_no_{sug_id}", "title": "👎 No"}],
-        )
-        posted = not (isinstance(r, dict) and r.get("error"))
-        await db.suggestions.update_one({"_id": res.inserted_id}, {"$set": {"poll_posted": posted}})
+        r = await wa.send_poll(gid, f"{body.title} — Do you support this?", ["Yes", "No"], 1)
+        poll_msg_id = wa.poll_message_id_from(r)
+        posted = poll_msg_id is not None
+    if not poll_msg_id:
+        poll_msg_id = f"local-{uuid.uuid4().hex}"
+    await db.suggestions.update_one({"_id": res.inserted_id}, {"$set": {"poll_posted": posted, "poll_message_id": poll_msg_id}})
     doc["_id"] = res.inserted_id
     out = _clean(doc)
     out["poll_posted"] = posted
+    out["poll_message_id"] = poll_msg_id
     return out
 
 

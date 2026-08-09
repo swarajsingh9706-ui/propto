@@ -115,6 +115,38 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
         await _ack(phone, f"🕒 Sure — please reply with your preferred visit time for {num} (e.g. \"Tomorrow 4 PM\").")
 
 
+async def _apply_poll_results(m: dict):
+    poll = m.get("poll") or {}
+    pu = m.get("poll_update") or {}
+    match_ids = [x for x in [m.get("id"), pu.get("poll_id")] if x]
+    s = None
+    for mid in match_ids:
+        s = await db.suggestions.find_one({"poll_message_id": mid})
+        if s:
+            break
+    if not s:
+        logger.info("poll update ignored — no suggestion for ids %s", match_ids)
+        return
+    results = poll.get("results") or []
+    yes = no = None
+    for i, r in enumerate(results):
+        name = (r.get("name") or "").strip().lower()
+        cnt = r.get("count")
+        if cnt is None:
+            cnt = len(r.get("voters") or [])
+        if "yes" in name:
+            yes = cnt
+        elif "no" in name:
+            no = cnt
+    if yes is None and no is None and len(results) >= 2:
+        yes = results[0].get("count") or 0
+        no = results[1].get("count") or 0
+    if yes is None and no is None:
+        return
+    await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"yes_votes": yes or 0, "no_votes": no or 0, "updated_at": now_iso()}})
+    logger.info("poll %s updated -> yes=%s no=%s", s.get("poll_message_id"), yes, no)
+
+
 async def _vote_suggestion(sug_id: str, phone: str, vote: str):
     try:
         s = await db.suggestions.find_one({"_id": ObjectId(sug_id)})
@@ -163,6 +195,9 @@ async def whapi_webhook(request: Request):
     messages = wa.parse_whapi_inbound(payload)
     logger.info("Whapi inbound: %d parsed msg(s): %s", len(messages), [{"from": m.get("from"), "group": bool(m.get("group_chat_id")), "btn": m.get("button_id"), "text": (m.get("text") or "")[:40]} for m in messages])
     for m in messages:
+        if m.get("type") == "poll" or m.get("poll"):
+            await _apply_poll_results(m)
+            continue
         group_chat_id = m.get("group_chat_id")
         society = None
         if group_chat_id:
