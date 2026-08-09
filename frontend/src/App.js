@@ -15,6 +15,7 @@ import Vendors from "@/pages/society/Vendors";
 import Residents from "@/pages/society/Residents";
 import AIActivity from "@/pages/society/AIActivity";
 import ReviewQueue from "@/pages/society/ReviewQueue";
+import Suggestions from "@/pages/society/Suggestions";
 import WhatsApp from "@/pages/society/WhatsApp";
 import Reports from "@/pages/society/Reports";
 
@@ -55,6 +56,7 @@ function App() {
             <Route path="/residents" element={<Protected><Residents /></Protected>} />
             <Route path="/ai-activity" element={<Protected><AIActivity /></Protected>} />
             <Route path="/review-queue" element={<Protected><ReviewQueue /></Protected>} />
+            <Route path="/suggestions" element={<Protected><Suggestions /></Protected>} />
             <Route path="/whatsapp" element={<Protected><WhatsApp /></Protected>} />
             <Route path="/reports" element={<Protected><Reports /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />

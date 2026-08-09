@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Ticket, Users, Wrench, Bot, ClipboardCheck,
-  MessageSquare, BarChart3, Building2, LogOut, ChevronLeft,
+  MessageSquare, BarChart3, Building2, LogOut, ChevronLeft, Vote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +17,7 @@ const SOCIETY_NAV = [
   { to: "/residents", label: "Residents", icon: Users },
   { to: "/ai-activity", label: "AI Activity", icon: Bot },
   { to: "/review-queue", label: "Review Queue", icon: ClipboardCheck },
+  { to: "/suggestions", label: "Suggestions", icon: Vote },
   { to: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ];

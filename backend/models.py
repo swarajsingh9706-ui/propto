@@ -135,3 +135,19 @@ class ReviewDecision(BaseModel):
     tower: Optional[str] = None
     priority: Optional[str] = None
     description: Optional[str] = None
+
+
+# ---------- Suggestions ----------
+class SuggestionCreate(BaseModel):
+    title: str
+    category: Optional[str] = "General"
+    author_name: Optional[str] = ""
+    flat: Optional[str] = ""
+
+
+class SuggestionStatusUpdate(BaseModel):
+    status: str
+
+
+class SuggestionVote(BaseModel):
+    vote: str  # yes | no

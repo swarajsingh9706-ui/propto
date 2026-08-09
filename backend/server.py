@@ -17,6 +17,7 @@ from routers.society_router import router as society_router
 from routers.ai_router import router as ai_router
 from routers.whatsapp_router import router as whatsapp_router
 from routers.reports_router import router as reports_router
+from routers.suggestions_router import router as suggestions_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("propto")
@@ -40,6 +41,7 @@ app.include_router(society_router)
 app.include_router(ai_router)
 app.include_router(whatsapp_router)
 app.include_router(reports_router)
+app.include_router(suggestions_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -104,6 +106,31 @@ async def seed_demo():
     logger.info("Seeded demo society %s", sid)
 
 
+async def seed_suggestions():
+    soc = await db.societies.find_one({"code": "GRNVLY"})
+    if not soc:
+        return
+    sid = str(soc["_id"])
+    if await db.suggestions.count_documents({"society_id": sid}) > 0:
+        return
+    samples = [
+        ("We should install a borewell of our own", "Infrastructure", "Mrs. Sharma", "B-1204", "Under Review", 58, 12),
+        ("Add CCTV cameras in the parking area", "Security", "Mr. Patil", "A-0802", "Approved", 41, 6),
+        ("Start a weekly cleaning drive for common areas", "Maintenance", "Mrs. Iyer", "C-1105", "Under Review", 29, 18),
+        ("Set up a children's play area in the garden", "Amenities", "Mr. Rao", "A-0305", "Pending", 22, 9),
+        ("Ban loud music after 10 PM", "Community", "Mrs. Nair", "C-0204", "Declined", 15, 33),
+    ]
+    for title, cat, who, flat, status, yes, no in samples:
+        voters = {f"y{i}": "yes" for i in range(yes)}
+        voters.update({f"n{i}": "no" for i in range(no)})
+        await db.suggestions.insert_one({
+            "society_id": sid, "title": title, "category": cat, "author_name": who, "flat": flat,
+            "status": status, "voters": voters, "yes_votes": yes, "no_votes": no,
+            "poll_posted": True, "created_at": now_iso(), "updated_at": now_iso(),
+        })
+    logger.info("Seeded demo suggestions")
+
+
 async def write_credentials():
     path = Path("/app/memory/test_credentials.md")
     content = f"""# Test Credentials
@@ -143,6 +170,7 @@ async def startup():
     await db.residents.create_index("society_id")
     await seed_super_admin()
     await seed_demo()
+    await seed_suggestions()
     await write_credentials()
 
 

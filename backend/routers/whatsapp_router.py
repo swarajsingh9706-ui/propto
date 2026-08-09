@@ -115,6 +115,20 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
         await _ack(phone, f"🕒 Sure — please reply with your preferred visit time for {num} (e.g. \"Tomorrow 4 PM\").")
 
 
+async def _vote_suggestion(sug_id: str, phone: str, vote: str):
+    try:
+        s = await db.suggestions.find_one({"_id": ObjectId(sug_id)})
+    except Exception:
+        s = None
+    if not s:
+        return
+    voters = s.get("voters", {}) or {}
+    voters[phone] = vote
+    yes = sum(1 for v in voters.values() if v == "yes")
+    no = sum(1 for v in voters.values() if v == "no")
+    await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"voters": voters, "yes_votes": yes, "no_votes": no, "updated_at": now_iso()}})
+
+
 async def _handle_button(society_id: str, phone: str, button_id: str):
     logger.info("button click phone=%s id=%s", phone, button_id)
     if button_id.startswith("vendor_accept_"):
@@ -136,6 +150,10 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
     elif button_id == "resident_cancel":
         await db.review_queue.update_many({"society_id": society_id, "phone": phone, "status": "pending"}, {"$set": {"status": "rejected", "reviewed_at": now_iso()}})
         await _ack(phone, "No problem — we won't create a ticket. Message us again anytime you need help.")
+    elif button_id.startswith("sugg_yes_"):
+        await _vote_suggestion(button_id.replace("sugg_yes_", ""), phone, "yes")
+    elif button_id.startswith("sugg_no_"):
+        await _vote_suggestion(button_id.replace("sugg_no_", ""), phone, "no")
 
 
 # -------- Whapi Webhook (public) — reads real WhatsApp GROUP chats --------
