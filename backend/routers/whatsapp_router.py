@@ -3,6 +3,7 @@ from fastapi.responses import PlainTextResponse
 from bson import ObjectId
 import os
 import logging
+import json
 
 from db import db
 from models import SimulateMessage, GroupConnect, TestSend, now_iso
@@ -124,8 +125,19 @@ async def _apply_poll_results(m: dict):
         s = await db.suggestions.find_one({"poll_message_id": mid})
         if s:
             break
+    if not s and poll.get("title"):
+        title = poll["title"].split(" — Do you support")[0].strip()
+        q = {"title": title}
+        gid = m.get("group_chat_id")
+        if gid:
+            soc = await db.societies.find_one({"whatsapp_group.chat_id": gid})
+            if soc:
+                q["society_id"] = str(soc["_id"])
+        s = await db.suggestions.find_one(q, sort=[("created_at", -1)])
+        if s and match_ids:
+            await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"poll_message_id": match_ids[0]}})
     if not s:
-        logger.info("poll update ignored — no suggestion for ids %s", match_ids)
+        logger.info("poll update ignored — no suggestion for ids %s title %s", match_ids, poll.get("title"))
         return
     results = poll.get("results") or []
     yes = no = None
@@ -189,11 +201,12 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
 
 
 # -------- Whapi Webhook (public) — reads real WhatsApp GROUP chats --------
-@router.post("/api/whapi/webhook")
+@router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
 async def whapi_webhook(request: Request):
     payload = await request.json()
+    logger.info("Whapi RAW [%s]: %s", request.method, json.dumps(payload)[:2500])
     messages = wa.parse_whapi_inbound(payload)
-    logger.info("Whapi inbound: %d parsed msg(s): %s", len(messages), [{"from": m.get("from"), "group": bool(m.get("group_chat_id")), "btn": m.get("button_id"), "text": (m.get("text") or "")[:40]} for m in messages])
+    logger.info("Whapi parsed %d msg(s): %s", len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
     for m in messages:
         if m.get("type") == "poll" or m.get("poll"):
             await _apply_poll_results(m)

@@ -117,6 +117,117 @@ class TestPollWebhookIngest:
         assert found["yes_votes"] == 2 and found["no_votes"] == 2
 
 
+class TestPollWebhookMethods:
+    """Verify /api/whapi/webhook accepts POST, PUT, PATCH with absolute counts."""
+
+    def _payload(self, s, y, n):
+        return {"messages": [{
+            "id": s["poll_message_id"], "type": "poll", "from_me": True,
+            "chat_id": "120363000@g.us",
+            "poll": {"title": f"{s['title']} — Do you support this?",
+                     "options": ["Yes", "No"],
+                     "results": [{"name": "Yes", "count": y},
+                                 {"name": "No", "count": n}]},
+        }]}
+
+    def _get(self, soc_h, sid):
+        g = requests.get(f"{API}/society/suggestions", headers=soc_h, timeout=15)
+        assert g.status_code == 200
+        return next(x for x in g.json()["suggestions"] if x["id"] == sid)
+
+    def test_post_exact_id_match(self, soc_h, created_ids):
+        s = _create(soc_h, created_ids)
+        r = requests.post(f"{API}/whapi/webhook", json=self._payload(s, 5, 3), timeout=20)
+        assert r.status_code == 200, r.text
+        found = self._get(soc_h, s["id"])
+        assert found["yes_votes"] == 5 and found["no_votes"] == 3, found
+
+    def test_put_method_accepted(self, soc_h, created_ids):
+        s = _create(soc_h, created_ids)
+        # baseline POST
+        requests.post(f"{API}/whapi/webhook", json=self._payload(s, 5, 3), timeout=20)
+        # now PUT with 9,1 (absolute)
+        r = requests.put(f"{API}/whapi/webhook", json=self._payload(s, 9, 1), timeout=20)
+        assert r.status_code == 200, f"PUT should be accepted, got {r.status_code}: {r.text}"
+        found = self._get(soc_h, s["id"])
+        assert found["yes_votes"] == 9 and found["no_votes"] == 1, found
+
+    def test_patch_method_accepted(self, soc_h, created_ids):
+        s = _create(soc_h, created_ids)
+        requests.put(f"{API}/whapi/webhook", json=self._payload(s, 9, 1), timeout=20)
+        r = requests.patch(f"{API}/whapi/webhook", json=self._payload(s, 2, 2), timeout=20)
+        assert r.status_code == 200, f"PATCH should be accepted, got {r.status_code}: {r.text}"
+        found = self._get(soc_h, s["id"])
+        assert found["yes_votes"] == 2 and found["no_votes"] == 2, found
+
+
+class TestTitleFallbackAndBackfill:
+    def test_title_fallback_updates_and_backfills_id(self, soc_h, created_ids):
+        s = _create(soc_h, created_ids)
+        original_pmid = s["poll_message_id"]
+        new_id = f"remote-{uuid.uuid4().hex}"
+        payload = {"messages": [{
+            "id": new_id, "type": "poll", "from_me": True,
+            "chat_id": "120363999@g.us",  # unbound group -> society scoping skipped
+            "poll": {"title": f"{s['title']} — Do you support this?",
+                     "options": ["Yes", "No"],
+                     "results": [{"name": "Yes", "count": 7},
+                                 {"name": "No", "count": 4}]},
+        }]}
+        r = requests.post(f"{API}/whapi/webhook", json=payload, timeout=20)
+        assert r.status_code == 200, r.text
+
+        # Verify votes updated
+        g = requests.get(f"{API}/society/suggestions", headers=soc_h, timeout=15)
+        found = next(x for x in g.json()["suggestions"] if x["id"] == s["id"])
+        assert found["yes_votes"] == 7 and found["no_votes"] == 4, found
+        # Verify poll_message_id was backfilled to the new id
+        assert found["poll_message_id"] == new_id, (
+            f"expected poll_message_id backfilled to {new_id}, got {found.get('poll_message_id')} "
+            f"(was {original_pmid})")
+
+        # And subsequent updates by the new id still work (exact-id match)
+        payload2 = {"messages": [{
+            "id": new_id, "type": "poll", "from_me": True,
+            "chat_id": "120363999@g.us",
+            "poll": {"results": [{"name": "Yes", "count": 1},
+                                 {"name": "No", "count": 0}]},
+        }]}
+        r2 = requests.put(f"{API}/whapi/webhook", json=payload2, timeout=20)
+        assert r2.status_code == 200
+        g2 = requests.get(f"{API}/society/suggestions", headers=soc_h, timeout=15)
+        found2 = next(x for x in g2.json()["suggestions"] if x["id"] == s["id"])
+        assert found2["yes_votes"] == 1 and found2["no_votes"] == 0
+
+    def test_unknown_id_and_unknown_title_ignored(self, soc_h, created_ids):
+        # baseline: create a suggestion + set to known 3,2 via exact-id
+        s = _create(soc_h, created_ids)
+        requests.post(f"{API}/whapi/webhook", json={"messages": [{
+            "id": s["poll_message_id"], "type": "poll", "from_me": True,
+            "chat_id": "120363000@g.us",
+            "poll": {"results": [{"name": "Yes", "count": 3}, {"name": "No", "count": 2}]},
+        }]}, timeout=20)
+
+        # send poll with unknown id AND unknown title
+        payload = {"messages": [{
+            "id": f"nope-{uuid.uuid4().hex}", "type": "poll", "from_me": True,
+            "chat_id": "120363000@g.us",
+            "poll": {"title": f"NONEXISTENT_{uuid.uuid4().hex} — Do you support this?",
+                     "results": [{"name": "Yes", "count": 99}, {"name": "No", "count": 99}]},
+        }]}
+        r = requests.post(f"{API}/whapi/webhook", json=payload, timeout=20)
+        assert r.status_code == 200, r.text
+        # PUT/PATCH variants must also 200 (not 405) and not mutate
+        r2 = requests.put(f"{API}/whapi/webhook", json=payload, timeout=20)
+        assert r2.status_code == 200
+        r3 = requests.patch(f"{API}/whapi/webhook", json=payload, timeout=20)
+        assert r3.status_code == 200
+
+        g = requests.get(f"{API}/society/suggestions", headers=soc_h, timeout=15)
+        found = next(x for x in g.json()["suggestions"] if x["id"] == s["id"])
+        assert found["yes_votes"] == 3 and found["no_votes"] == 2, found
+
+
 class TestManualAndStatus:
     def test_manual_vote_increments(self, soc_h, created_ids):
         s = _create(soc_h, created_ids)

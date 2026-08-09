@@ -1,0 +1,22 @@
+{
+  "summary": "Focused re-verification of Whapi poll-vote ingestion robustness after the multi-method + title-fallback fix. Extended /app/backend/tests/test_suggestions.py with two new test classes (TestPollWebhookMethods, TestTitleFallbackAndBackfill). All 12/12 backend tests pass in 4.78s. Verified: (1) /api/whapi/webhook accepts POST, PUT and PATCH (no 405); (2) yes_votes/no_votes are absolute (5/3 -> 9/1 via PUT -> 2/2 via PATCH exactly overwrite prior counts); (3) exact-id match path works for local-<uuid> ids; (4) title-fallback path: sending a poll UPDATE with a brand-new messages[0].id and poll.title '<suggestion title> — Do you support this?' to an unbound group chat_id still resolves to the suggestion by stripped title, updates yes/no, AND backfills poll_message_id to the new id (verified: subsequent exact-id update by the new id then works); (5) unknown id + unknown title is safely ignored on POST/PUT/PATCH (200 OK, no other suggestion mutated). No frontend testing done — request was backend-only. All TEST_* suggestions cleaned up (leftover=0, only the 5 pre-existing demo suggestions remain in Green Valley).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_suggestions.py",
+    "/app/test_reports/pytest/suggestions_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_apply_poll_results title fallback uses .split(' — Do you support')[0] — resilient to the exact suffix used by create_suggestion. If the suffix wording ever changes in suggestions_router, keep this splitter in sync.",
+    "Title fallback sorts by created_at desc and picks first match; if two suggestions in different societies share the exact same title and neither society has a bound group, the newest one wins (society scoping is only enforced when the update's chat_id matches a bound group). Acceptable given current single-active-society demo data, but worth noting for future multi-tenant polish."
+  ],
+  "updated_files": ["/app/backend/tests/test_suggestions.py"],
+  "success_rate": { "backend": "100% (12/12)", "frontend": "not tested (backend-only request)" },
+  "seed_data_creation": "All TEST_Sug_* suggestions created during the run were auto-deleted by the module-scope teardown fixture. Verified via GET /api/society/suggestions — 0 leftover TEST_ items; only pre-existing demo suggestions remain.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@greenvalley.com / Admin@123 (society admin) — working",
+  "context_for_next_testing_agent": "test_suggestions.py now has 12 cases covering create, exact-id ingestion, absolute-not-additive semantics, unknown-id-ignore, POST/PUT/PATCH acceptance, title-fallback with poll_message_id backfill (subsequent exact-id updates work after backfill), unknown-id+unknown-title ignore across all 3 methods, manual vote, status PUT, and stats totals. To simulate a title-fallback vote update, POST/PUT/PATCH /api/whapi/webhook (no auth) with {messages:[{id:<brand-new-id>, type:'poll', from_me:true, chat_id:'<any>@g.us', poll:{title:'<exact suggestion title> — Do you support this?', results:[{name:'Yes',count:N},{name:'No',count:M}]}}]}. Green Valley currently has no bound WhatsApp group, so society-scoping in the fallback is bypassed.",
+  "rca_of_the_issue": "Original bug: Whapi channel webhook was only subscribed to new-message POSTs, not to message UPDATES (PUT/PATCH) that carry poll vote tallies. Code fixes verified end-to-end: (a) whatsapp_router.whapi_webhook is now @router.api_route(methods=['POST','PUT','PATCH']) so update deliveries are no longer rejected with 405; (b) _apply_poll_results does exact-id match first, then a title-based fallback (strips ' — Do you support this?') optionally scoped to the society whose bound group matches the update's chat_id, and backfills the real poll_message_id onto the suggestion so future updates hit the fast exact-id path; (c) yes_votes/no_votes are set to the absolute counts from poll.results (overwrite, not additive)."
+}
