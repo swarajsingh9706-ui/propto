@@ -97,4 +97,25 @@ async def analyze_message(text: str) -> dict:
         data["confidence"] = 0.0
     if data.get("category") not in COMPLAINT_CATEGORIES:
         data["category"] = data.get("category") or ""
+    # Match against the 500-situation knowledge base. On a confident match the
+    # Excel category/sub-category/priority take precedence over the AI guess.
+    try:
+        import situations_kb
+        kb = situations_kb.match(text)
+        if kb:
+            if kb.get("app_category"):
+                data["category"] = kb["app_category"]
+            if kb.get("priority"):
+                data["priority"] = kb["priority"]
+            data["sub_category"] = kb.get("sub_category") or ""
+            data["kb_category"] = kb.get("kb_category") or ""
+            data["matched_situation"] = kb.get("situation")
+            data["kb_score"] = kb.get("score")
+            # A KB hit means it is a genuine maintenance situation.
+            if data.get("intent") != "Complaint":
+                data["intent"] = "Complaint"
+            if float(data.get("confidence", 0)) < 0.7:
+                data["confidence"] = 0.75
+    except Exception:
+        pass
     return data

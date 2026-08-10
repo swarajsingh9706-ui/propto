@@ -44,3 +44,9 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 1. Collect Meta WhatsApp credentials and go live.
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
+
+## Excel Situation KB (2026-06 update)
+- `Issues.xlsx` (500 situations, no header row: [#, Category, Sub-category, Situation, Priority, Time-window]) loaded into `backend/situations_kb.py`, cached at `backend/data/situations.json`.
+- On a confident fuzzy match (threshold 0.6), the Excel category/sub-category/priority OVERRIDE the AI guess. Granular Excel category is mapped to the app's 11-category enum (`_CAT_MAP`) for vendor routing/analytics; raw Excel category kept in `kb_category`, sub-category in `sub_category`, matched text in `matched_situation`.
+- Ticket schema now persists `sub_category`, `kb_category`, `matched_situation` (stored only; not shown in UI per user choice).
+- Verified e2e via simulator: correct category/priority/sub_category + correct vendor auto-assignment. Backend-tested (agent).
