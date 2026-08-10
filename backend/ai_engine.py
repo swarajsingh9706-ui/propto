@@ -103,10 +103,12 @@ async def analyze_message(text: str) -> dict:
         import situations_kb
         kb = situations_kb.match(text)
         if kb:
-            if kb.get("app_category"):
-                data["category"] = kb["app_category"]
+            # Excel is authoritative: show the exact Excel category + priority.
+            if kb.get("kb_category"):
+                data["category"] = kb["kb_category"]
             if kb.get("priority"):
                 data["priority"] = kb["priority"]
+            data["routing_category"] = kb.get("app_category") or ""
             data["sub_category"] = kb.get("sub_category") or ""
             data["kb_category"] = kb.get("kb_category") or ""
             data["matched_situation"] = kb.get("situation")

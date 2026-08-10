@@ -11,7 +11,9 @@ _STOP = {"the", "a", "an", "is", "in", "my", "of", "to", "and", "for", "on", "at
 
 def _prio(p):
     p = (p or "").lower()
-    if "critical" in p or "high" in p:
+    if "critical" in p:
+        return "Critical"
+    if "high" in p:
         return "High"
     if "medium" in p:
         return "Medium"

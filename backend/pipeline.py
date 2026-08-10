@@ -11,7 +11,7 @@ import whatsapp_client as wa
 
 logger = logging.getLogger("propto.pipeline")
 
-SLA_HOURS = {"High": 4, "Medium": 24, "Low": 72}
+SLA_HOURS = {"Critical": 2, "High": 4, "Medium": 24, "Low": 72}
 
 
 def threshold() -> float:
@@ -126,7 +126,9 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
     doc["sla_due"] = (datetime.now(timezone.utc) + timedelta(hours=doc["sla_hours"])).isoformat()
     res = await db.tickets.insert_one(doc)
     doc["_id"] = res.inserted_id
-    vendor = await pick_vendor(society_id, doc["category"])
+    # Route to a vendor using the mapped app-category (Excel categories are granular).
+    routing_cat = ai.get("routing_category") or doc["category"]
+    vendor = await pick_vendor(society_id, routing_cat)
     if vendor:
         await assign_vendor(doc, vendor)
     who = (resident["name"] + ", " if resident else "")

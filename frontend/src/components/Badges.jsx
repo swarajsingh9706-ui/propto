@@ -5,7 +5,8 @@ const STATUS = {
   Escalated: "bg-red-50 text-red-700 border-red-200",
 };
 const PRIORITY = {
-  High: "bg-red-50 text-red-700 border-red-200",
+  Critical: "bg-red-100 text-red-800 border-red-300",
+  High: "bg-orange-50 text-orange-700 border-orange-200",
   Medium: "bg-amber-50 text-amber-700 border-amber-200",
   Low: "bg-zinc-100 text-zinc-600 border-zinc-200",
 };
