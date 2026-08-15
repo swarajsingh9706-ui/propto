@@ -8,6 +8,7 @@ import Layout from "@/components/Layout";
 import Login from "@/pages/SocietyLogin";
 import SuperAdminLogin from "@/pages/SuperAdminLogin";
 import Societies from "@/pages/super/Societies";
+import SuperDashboard from "@/pages/super/SuperDashboard";
 import SuperReports from "@/pages/super/SuperReports";
 import Dashboard from "@/pages/society/Dashboard";
 import Tickets from "@/pages/society/Tickets";
@@ -35,7 +36,7 @@ function HomeRedirect() {
   const { user } = useAuth();
   if (user === null) return null;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={user.role === "super_admin" ? "/super/societies" : "/dashboard"} replace />;
+  return <Navigate to={user.role === "super_admin" ? "/super/dashboard" : "/dashboard"} replace />;
 }
 
 function App() {
@@ -48,6 +49,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/admin/login" element={<SuperAdminLogin />} />
             <Route path="/" element={<HomeRedirect />} />
+            <Route path="/super/dashboard" element={<Protected><SuperDashboard /></Protected>} />
             <Route path="/super/societies" element={<Protected><Societies /></Protected>} />
             <Route path="/super/reports" element={<Protected><SuperReports /></Protected>} />
             <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />

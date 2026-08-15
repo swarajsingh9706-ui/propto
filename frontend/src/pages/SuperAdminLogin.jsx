@@ -28,7 +28,7 @@ export default function SuperAdminLogin() {
         setError("These are Society Admin credentials. Please use the Society portal.");
         return;
       }
-      navigate("/super/societies");
+      navigate("/super/dashboard");
     } catch (err) {
       setError(apiError(err));
     } finally {

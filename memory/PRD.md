@@ -45,6 +45,14 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
 
+## UI Redesign — Blue/Indigo Dashboards (2026-06 update)
+- Rebranded the ENTIRE app from green/gold to blue/indigo (primary #2563eb, indigo #4f46e5) to match user-uploaded `Propto_Admin_Dashboard.html` reference. Theme driven via CSS vars in `index.css` + `brand.*` tokens in `tailwind.config.js` (kept token names green/gold to avoid touching every page). PROPTO logo kept.
+- New reusable dashboard kit: `components/DashKit.jsx` (TopHeader, DashStat top-bordered stat cards, Panel, PriorityDot, SLABar).
+- Society Dashboard (`pages/society/Dashboard.jsx`) rebuilt: greeting top-header, 6 stat cards (Total/Escalated/Open/Overdue/Assigned/Resolved Today), Assets+Vendors summary, Escalated table w/ SLA bars, Recent Tickets, Upcoming Maintenance (placeholder), right rail (Alerts, Resident Suggestions, Quick Actions).
+- Super Admin Dashboard (`pages/super/SuperDashboard.jsx`) NEW at `/super/dashboard` (now the super landing page + nav item): platform stat cards, Societies Overview table w/ Manage, Overdue/Vendors rail cards, Top Categories bars.
+- Backend: `/api/society/dashboard` extended (overdue/assigned/resolved_today + escalated list); NEW `/api/super/dashboard`.
+- Assets & Upcoming Maintenance show "coming soon"/empty states (data not yet modeled). Verified: both endpoints + both dashboards render (screenshots) and global theme applied across pages.
+
 ## Excel Situation KB (2026-06 update)
 - `Issues.xlsx` (500 situations, no header row: [#, Category, Sub-category, Situation, Priority, Time-window]) loaded into `backend/situations_kb.py`, cached at `backend/data/situations.json`.
 - On a confident fuzzy match (threshold 0.6), the Excel category/sub-category/priority OVERRIDE the AI guess. Granular Excel category is mapped to the app's 11-category enum (`_CAT_MAP`) for vendor routing/analytics; raw Excel category kept in `kb_category`, sub-category in `sub_category`, matched text in `matched_situation`.

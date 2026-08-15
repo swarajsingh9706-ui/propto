@@ -70,6 +70,39 @@ async def delete_society(society_id: str, user: dict = Depends(require_super_adm
     return {"status": "deleted"}
 
 
+@router.get("/dashboard")
+async def super_dashboard(user: dict = Depends(require_super_admin)):
+    now_str = datetime.now(timezone.utc).isoformat()
+    societies = await db.societies.find().sort("created_at", -1).to_list(500)
+    rows = []
+    for s in societies:
+        sid = str(s["_id"])
+        rows.append({
+            "id": sid, "name": s["name"], "code": s["code"], "city": s.get("city", ""),
+            "active": s.get("active", True),
+            "total": await db.tickets.count_documents({"society_id": sid}),
+            "open": await db.tickets.count_documents({"society_id": sid, "status": {"$in": ["Open", "Pending"]}}),
+            "escalated": await db.tickets.count_documents({"society_id": sid, "status": "Escalated"}),
+            "resolved": await db.tickets.count_documents({"society_id": sid, "status": "Resolved"}),
+        })
+    stats = {
+        "societies": len(societies),
+        "active_societies": sum(1 for s in societies if s.get("active", True)),
+        "total_tickets": await db.tickets.count_documents({}),
+        "open": await db.tickets.count_documents({"status": {"$in": ["Open", "Pending"]}}),
+        "escalated": await db.tickets.count_documents({"status": "Escalated"}),
+        "overdue": await db.tickets.count_documents({"status": {"$in": ["Open", "Pending", "Escalated"]}, "sla_due": {"$lt": now_str}}),
+        "resolved": await db.tickets.count_documents({"status": "Resolved"}),
+        "vendors": await db.vendors.count_documents({}),
+    }
+    cat_pipeline = [{"$group": {"_id": "$category", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}, {"$limit": 6}]
+    categories = [{"category": c["_id"], "count": c["count"]} async for c in db.tickets.aggregate(cat_pipeline)]
+    recent = []
+    for t in await db.tickets.find().sort("created_at", -1).limit(6).to_list(6):
+        recent.append(_clean(t))
+    return {"stats": stats, "societies": rows, "categories": categories, "recent": recent}
+
+
 @router.get("/categories")
 async def get_categories(user: dict = Depends(require_super_admin)):
     return COMPLAINT_CATEGORIES

@@ -19,10 +19,10 @@ module.exports = {
       },
       colors: {
         brand: {
-          green: '#0C4428',
-          greenDark: '#082E1B',
-          gold: '#C6A02C',
-          goldLight: '#E4C767',
+          green: '#2563eb',
+          greenDark: '#1e40af',
+          gold: '#4f46e5',
+          goldLight: '#6366f1',
         },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',

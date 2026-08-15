@@ -1,83 +1,201 @@
-import { PageHeader } from "@/components/Layout";
-import { StatCard } from "@/components/StatCard";
-import { useFetch } from "@/lib/useScope";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { useScope, useFetch } from "@/lib/useScope";
+import api from "@/lib/api";
+import { TopHeader, DashStat, Panel, PriorityDot, SLABar } from "@/components/DashKit";
+import { StatusBadge } from "@/components/Badges";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
-} from "recharts";
-import { Loader2, Ticket, Wrench, Users, Building2, CheckCircle2, Clock, AlertTriangle, Bot } from "lucide-react";
-import { StatusBadge, PriorityBadge } from "@/components/Badges";
+  Loader2, Ticket, AlertTriangle, Clock, Timer, UserCheck, CheckCircle2,
+  Package, Wrench, ClipboardList, HardHat, BarChart3,
+} from "lucide-react";
 
-const COLORS = ["#0C4428", "#C6A02C", "#2F8F5B", "#E4C767", "#0A5C39", "#9C7D24", "#146B42"];
+const STATS = [
+  { key: "total", label: "Total Tickets", sub: "All tickets", color: "#2563eb", iconBg: "#dbeafe", icon: Ticket },
+  { key: "escalated", label: "Escalated", sub: "Needs your action", color: "#ef4444", iconBg: "#fee2e2", icon: AlertTriangle },
+  { key: "open", label: "Open", sub: "Awaiting assignment", color: "#f59e0b", iconBg: "#fef3c7", icon: Clock },
+  { key: "overdue", label: "Overdue Tickets", sub: "Past SLA target", color: "#ef4444", iconBg: "#fee2e2", icon: Timer },
+  { key: "assigned", label: "Assigned", sub: "Confirmed vendors", color: "#22c55e", iconBg: "#dcfce7", icon: UserCheck },
+  { key: "resolved_today", label: "Resolved Today", sub: "Marked resolved", color: "#06b6d4", iconBg: "#cffafe", icon: CheckCircle2 },
+];
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const cfg = useScope();
   const { data, loading } = useFetch("/society/dashboard");
+  const [suggestions, setSuggestions] = useState([]);
+
+  useEffect(() => {
+    api.get("/society/suggestions", cfg).then((r) => setSuggestions(r.data.suggestions || [])).catch(() => {});
+    // eslint-disable-next-line
+  }, []);
+
   if (loading || !data) return <Center />;
-  const { stats, recent, by_category, status_dist } = data;
+  const { stats, recent, escalated } = data;
+  const firstName = (user?.name || "there").split(" ")[0];
 
   return (
-    <div className="p-8">
-      <PageHeader title="Dashboard" subtitle="Society Overview" />
+    <div className="flex min-h-screen flex-col">
+      <TopHeader greeting={`Good day, ${firstName}!`} subtitle="Here's what's happening at your society" />
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-        <StatCard testid="stat-total" label="Total Complaints" value={stats.total} icon={Ticket} />
-        <StatCard testid="stat-open" label="Open" value={stats.open} icon={Clock} accent="text-blue-600" />
-        <StatCard testid="stat-pending" label="Pending" value={stats.pending} icon={Clock} accent="text-amber-600" />
-        <StatCard testid="stat-resolved" label="Resolved" value={stats.resolved} icon={CheckCircle2} accent="text-emerald-600" />
-        <StatCard testid="stat-escalated" label="Escalated" value={stats.escalated} icon={AlertTriangle} accent="text-red-600" />
-        <StatCard testid="stat-ai" label="AI Generated" value={stats.ai_generated} icon={Bot} accent="text-sky-600" />
-      </div>
+      <div className="flex gap-5 px-6 py-5">
+        {/* MAIN COLUMN */}
+        <div className="min-w-0 flex-1">
+          <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+            {STATS.map((s) => (
+              <DashStat key={s.key} testid={`stat-${s.key}`} value={stats[s.key] ?? 0} label={s.label}
+                sub={s.sub} color={s.color} iconBg={s.iconBg} icon={s.icon} />
+            ))}
+          </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-lg border border-border bg-card p-6 lg:col-span-2">
-          <p className="overline mb-4">Complaints by Category</p>
-          {by_category.length === 0 ? <NoData /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={by_category} margin={{ left: -20 }}>
-                <XAxis dataKey="category" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="count" fill="#0C4428" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+            <SummaryCard icon={Package} iconBg="#dcfce7" label="Assets" value="—" onClick={() => navigate("/tickets")} testid="summary-assets" />
+            <SummaryCard icon={ClipboardList} iconBg="#dbeafe" label="Vendors" value={stats.vendors} onClick={() => navigate("/vendors")} testid="summary-vendors" />
+          </div>
+
+          <Panel testid="panel-escalated" danger
+            title="Escalated Tickets"
+            icon={<AlertTriangle className="h-4 w-4 text-red-600" />}
+            action={<button data-testid="escalated-viewall" onClick={() => navigate("/tickets")} className="text-[12px] font-bold text-brand">View all</button>}>
+            {escalated.length === 0 ? (
+              <EmptyRow text="No escalated tickets — everything is under control." />
+            ) : (
+              <>
+                <RowHead cols="90px 1.4fr 0.8fr 1fr 1.4fr 120px" items={["TICKET ID", "ISSUE", "UNIT", "RESIDENT", "SLA", "ACTION"]} />
+                {escalated.map((t, i) => (
+                  <div key={t.id} className="grid items-center gap-2 border-b border-border px-[18px] py-3 last:border-0"
+                    style={{ gridTemplateColumns: "90px 1.4fr 0.8fr 1fr 1.4fr 120px", borderLeft: "3px solid #dc2626", background: i % 2 ? "#f8fafc" : "#fff" }}>
+                    <div className="text-[12px] font-extrabold text-red-600">{t.ticket_number?.slice(-6)}</div>
+                    <div className="truncate text-[13px] font-semibold text-slate-900">{t.category}</div>
+                    <div className="text-[12px] text-slate-500">{t.flat || "—"}</div>
+                    <div className="truncate text-[12px] text-slate-500">{t.resident_name || "—"}</div>
+                    <SLABar createdAt={t.created_at} slaHours={t.sla_hours} />
+                    <button data-testid={`assign-now-${t.id}`} onClick={() => navigate("/tickets")}
+                      className="whitespace-nowrap rounded-[7px] bg-brand px-3 py-1.5 text-[11px] font-bold text-white hover:opacity-90">
+                      Assign Now →
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
+          </Panel>
+
+          <Panel testid="panel-recent" title="Recent Tickets"
+            action={<button data-testid="recent-viewall" onClick={() => navigate("/tickets")} className="text-[12px] font-bold text-brand">View all</button>}>
+            {recent.length === 0 ? (
+              <EmptyRow text="No tickets yet." />
+            ) : (
+              <>
+                <RowHead cols="90px 1fr 0.8fr 0.9fr 0.9fr 1fr" items={["ID", "ISSUE", "UNIT", "STATUS", "PRIORITY", "ASSIGNED TO"]} />
+                {recent.map((t, i) => (
+                  <div key={t.id} className="grid items-center gap-2.5 border-b border-border px-[18px] py-3 last:border-0"
+                    style={{ gridTemplateColumns: "90px 1fr 0.8fr 0.9fr 0.9fr 1fr", background: i % 2 ? "#f8fafc" : "#fff" }}>
+                    <div className="text-[12px] font-extrabold text-brand">{t.ticket_number?.slice(-6)}</div>
+                    <div className="truncate text-[13px] text-slate-700">{t.category}</div>
+                    <div className="text-[12px] text-slate-500">{t.flat || "—"}</div>
+                    <StatusBadge status={t.status} />
+                    <PriorityDot priority={t.priority} />
+                    <div className="truncate text-[12px] text-slate-500">{t.vendor_name || "Unassigned"}</div>
+                  </div>
+                ))}
+              </>
+            )}
+          </Panel>
+
+          <Panel testid="panel-maintenance" title="Upcoming Maintenance"
+            action={<span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">Coming soon</span>}>
+            <EmptyRow text="Asset maintenance scheduling arrives soon." />
+          </Panel>
         </div>
-        <div className="rounded-lg border border-border bg-card p-6">
-          <p className="overline mb-4">Status Distribution</p>
-          {stats.total === 0 ? <NoData /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={status_dist} dataKey="count" nameKey="status" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                  {status_dist.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
 
-      <div className="mt-6 rounded-lg border border-border bg-card">
-        <p className="overline border-b border-border px-6 py-4">Recent Tickets</p>
-        {recent.length === 0 ? <div className="p-6"><NoData /></div> : (
-          <table className="w-full text-sm">
-            <tbody>
-              {recent.map((t) => (
-                <tr key={t.id} className="border-b border-border last:border-0 hover:bg-secondary/50">
-                  <td className="px-6 py-3 font-mono text-xs text-zinc-500">{t.ticket_number}</td>
-                  <td className="px-6 py-3 font-medium">{t.category}</td>
-                  <td className="px-6 py-3 text-zinc-500">Flat {t.flat || "—"}</td>
-                  <td className="px-6 py-3"><PriorityBadge priority={t.priority} /></td>
-                  <td className="px-6 py-3"><StatusBadge status={t.status} /></td>
-                  <td className="px-6 py-3 text-right text-zinc-400">{t.vendor_name || "Unassigned"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {/* RIGHT RAIL */}
+        <div className="hidden w-[300px] flex-shrink-0 flex-col gap-3.5 xl:flex">
+          <Panel testid="panel-alerts" title="Alerts"
+            action={<button onClick={() => navigate("/tickets")} className="text-[12px] font-bold text-brand">View all</button>}>
+            {escalated.length === 0 ? (
+              <div className="px-4 py-6 text-center text-[12px] text-slate-400">No active alerts</div>
+            ) : escalated.slice(0, 4).map((t) => (
+              <div key={t.id} className="flex items-start gap-2.5 border-b border-border px-4 py-2.5 last:border-0">
+                <AlertTriangle className="mt-0.5 h-[15px] w-[15px] flex-shrink-0 text-red-600" />
+                <div className="flex-1">
+                  <div className="text-[12px] font-bold text-red-600">Ticket {t.ticket_number?.slice(-6)} escalated</div>
+                  <div className="mt-0.5 text-[11px] text-slate-500">{t.category} · {t.flat || "—"}</div>
+                </div>
+              </div>
+            ))}
+          </Panel>
+
+          <Panel testid="panel-suggestions" title="Resident Suggestions"
+            icon={<span className="text-[14px]">📋</span>}
+            action={<button onClick={() => navigate("/suggestions")} className="text-[12px] font-bold text-brand">View all</button>}>
+            {suggestions.length === 0 ? (
+              <div className="px-4 py-6 text-center text-[12px] text-slate-400">No suggestions yet</div>
+            ) : suggestions.slice(0, 3).map((s, i) => {
+              const yes = s.yes_votes || 0, no = s.no_votes || 0, tot = yes + no;
+              const pct = tot ? Math.round((yes / tot) * 100) : 0;
+              const bar = ["#22c55e", "#2563eb", "#8b5cf6"][i % 3];
+              return (
+                <div key={s.id} className="border-b border-border px-4 py-3 last:border-0">
+                  <div className="mb-1 text-[13px] font-bold text-slate-900">{s.title}</div>
+                  <div className="mb-2 text-[11px] text-slate-400">{s.author_name || "Resident"} · {s.flat || "—"}</div>
+                  <div className="mb-1.5 h-[5px] rounded bg-slate-100">
+                    <div className="h-[5px] rounded" style={{ width: `${pct}%`, background: bar }} />
+                  </div>
+                  <div className="flex justify-between text-[11px] font-bold">
+                    <span className="text-green-600">✓ Yes {yes}</span>
+                    <span className="text-red-600">✗ No {no}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </Panel>
+
+          <div className="rounded-xl border border-border bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div className="mb-3 text-[13px] font-extrabold text-slate-900">Quick Actions</div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <QuickAction icon={ClipboardList} label="Tickets" color="#2563eb" bg="#eff6ff" border="#bfdbfe" onClick={() => navigate("/tickets")} testid="qa-tickets" />
+              <QuickAction icon={Wrench} label="Add Vendor" color="#16a34a" bg="#dcfce7" border="#86efac" onClick={() => navigate("/vendors")} testid="qa-vendor" />
+              <QuickAction icon={HardHat} label="Residents" color="#7c3aed" bg="#f5f3ff" border="#ddd6fe" onClick={() => navigate("/residents")} testid="qa-residents" />
+              <QuickAction icon={BarChart3} label="View Reports" color="#d97706" bg="#fef3c7" border="#fde68a" onClick={() => navigate("/reports")} testid="qa-reports" />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-const Center = () => <div className="flex h-96 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
-const NoData = () => <div className="flex h-40 items-center justify-center text-sm text-zinc-400">No data yet</div>;
+const SummaryCard = ({ icon: Icon, iconBg, label, value, onClick, testid }) => (
+  <div data-testid={testid} className="flex flex-1 items-center justify-between rounded-xl border border-border bg-white px-[18px] py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    <div className="flex items-center gap-3">
+      <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px]" style={{ background: iconBg }}>
+        <Icon className="h-[18px] w-[18px] text-slate-700" />
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold text-slate-400">{label}</div>
+        <div className="text-[26px] font-black leading-tight text-slate-900">{value}</div>
+      </div>
+    </div>
+    <button onClick={onClick} className="text-[13px] font-bold text-brand">View all ›</button>
+  </div>
+);
+
+const QuickAction = ({ icon: Icon, label, color, bg, border, onClick, testid }) => (
+  <button data-testid={testid} onClick={onClick}
+    className="rounded-[10px] p-3.5 text-left transition-transform hover:-translate-y-0.5"
+    style={{ background: bg, border: `1px solid ${border}` }}>
+    <Icon className="mb-1.5 h-[18px] w-[18px]" style={{ color }} />
+    <div className="text-[12px] font-bold" style={{ color }}>{label}</div>
+  </button>
+);
+
+const RowHead = ({ cols, items }) => (
+  <div className="grid gap-2 border-b border-border bg-slate-50 px-[18px] py-2" style={{ gridTemplateColumns: cols }}>
+    {items.map((h) => (
+      <div key={h} className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">{h}</div>
+    ))}
+  </div>
+);
+const EmptyRow = ({ text }) => <div className="px-[18px] py-8 text-center text-[13px] text-slate-400">{text}</div>;
+const Center = () => <div className="flex h-96 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;

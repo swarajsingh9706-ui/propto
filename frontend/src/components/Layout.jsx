@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 const SUPER_NAV = [
+  { to: "/super/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/super/societies", label: "Societies", icon: Building2 },
   { to: "/super/reports", label: "Analytics", icon: BarChart3 },
 ];

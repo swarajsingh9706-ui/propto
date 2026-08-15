@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from bson import ObjectId
+from datetime import datetime, timezone
 import io
 
 from db import db, COMPLAINT_CATEGORIES
@@ -28,6 +29,8 @@ async def dashboard(society_id: str = None, user: dict = Depends(require_society
     if not sid:
         raise HTTPException(status_code=400, detail="society_id required")
     q = {"society_id": sid}
+    now_str = datetime.now(timezone.utc).isoformat()
+    today_str = datetime.now(timezone.utc).date().isoformat()
     stats = {
         "total": await db.tickets.count_documents(q),
         "open": await db.tickets.count_documents({**q, "status": "Open"}),
@@ -37,15 +40,20 @@ async def dashboard(society_id: str = None, user: dict = Depends(require_society
         "ai_generated": await db.tickets.count_documents({**q, "ai_generated": True}),
         "vendors": await db.vendors.count_documents(q),
         "residents": await db.residents.count_documents(q),
+        "overdue": await db.tickets.count_documents({**q, "status": {"$in": ["Open", "Pending", "Escalated"]}, "sla_due": {"$lt": now_str}}),
+        "assigned": await db.tickets.count_documents({**q, "vendor_id": {"$ne": None}, "status": {"$in": ["Pending"]}}),
+        "resolved_today": await db.tickets.count_documents({**q, "status": "Resolved", "updated_at": {"$gte": today_str}}),
     }
     recent = [_clean(t) for t in await db.tickets.find(q).sort("created_at", -1).limit(6).to_list(6)]
+    escalated = [_clean(t) for t in await db.tickets.find({**q, "status": "Escalated"}).sort("created_at", -1).limit(5).to_list(5)]
     cat_pipeline = [{"$match": q}, {"$group": {"_id": "$category", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
     by_category = [{"category": c["_id"], "count": c["count"]} async for c in db.tickets.aggregate(cat_pipeline)]
     status_dist = [
         {"status": s, "count": stats[k]} for s, k in
         [("Open", "open"), ("Pending", "pending"), ("Resolved", "resolved"), ("Escalated", "escalated")]
     ]
-    return {"stats": stats, "recent": recent, "by_category": by_category, "status_dist": status_dist}
+    return {"stats": stats, "recent": recent, "escalated": escalated,
+            "by_category": by_category, "status_dist": status_dist}
 
 
 # ---------------- Vendors ----------------

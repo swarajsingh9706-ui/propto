@@ -10,8 +10,8 @@ body {
     font-family: "IBM Plex Sans", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #FAF8F3;
-    color: #0B2A1C;
+    background-color: #f8fafc;
+    color: #0f172a;
 }
 
 code, .font-mono {
@@ -20,26 +20,26 @@ code, .font-mono {
 
 @layer base {
     :root {
-        --background: 44 33% 96%;
-        --foreground: 155 45% 10%;
+        --background: 210 40% 98%;
+        --foreground: 222 47% 11%;
         --card: 0 0% 100%;
-        --card-foreground: 155 45% 10%;
+        --card-foreground: 222 47% 11%;
         --popover: 0 0% 100%;
-        --popover-foreground: 155 45% 10%;
-        --primary: 152 72% 15%;
-        --primary-foreground: 45 60% 97%;
-        --secondary: 150 16% 94%;
-        --secondary-foreground: 152 45% 15%;
-        --muted: 150 16% 94%;
-        --muted-foreground: 150 8% 40%;
-        --accent: 45 50% 90%;
-        --accent-foreground: 152 45% 15%;
-        --destructive: 0 72% 48%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 150 14% 87%;
-        --input: 150 14% 87%;
-        --ring: 152 72% 15%;
-        --radius: 0.5rem;
+        --popover-foreground: 222 47% 11%;
+        --primary: 221 83% 53%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 210 40% 96%;
+        --secondary-foreground: 222 47% 20%;
+        --muted: 210 40% 96%;
+        --muted-foreground: 215 16% 47%;
+        --accent: 214 95% 93%;
+        --accent-foreground: 221 83% 40%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 214 32% 91%;
+        --input: 214 32% 91%;
+        --ring: 221 83% 53%;
+        --radius: 0.75rem;
     }
 }
 
@@ -58,19 +58,19 @@ code, .font-mono {
 .overline {
     text-transform: uppercase;
     font-size: 0.6875rem;
-    letter-spacing: 0.2em;
-    font-weight: 600;
-    color: #6b7d72;
+    letter-spacing: 0.12em;
+    font-weight: 700;
+    color: #94a3b8;
 }
 
-.text-gold { color: #C6A02C; }
-.bg-gold { background-color: #C6A02C; }
-.border-gold { border-color: #C6A02C; }
-.text-brand { color: #0C4428; }
-.bg-brand { background-color: #0C4428; }
+.text-gold { color: #4f46e5; }
+.bg-gold { background-color: #4f46e5; }
+.border-gold { border-color: #4f46e5; }
+.text-brand { color: #2563eb; }
+.bg-brand { background-color: #2563eb; }
 
 ::selection {
-    background: #0C4428;
+    background: #2563eb;
     color: #fff;
 }
 
@@ -79,10 +79,10 @@ code, .font-mono {
 }
 .card-hover:hover {
     transform: translateY(-1px);
-    border-color: #C6A02C;
-    box-shadow: 0 6px 20px -12px rgba(12, 68, 40, 0.35);
+    border-color: #93c5fd;
+    box-shadow: 0 6px 20px -12px rgba(37, 99, 235, 0.35);
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #c9cfc9; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
