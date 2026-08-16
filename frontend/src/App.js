@@ -9,6 +9,7 @@ import Login from "@/pages/SocietyLogin";
 import SuperAdminLogin from "@/pages/SuperAdminLogin";
 import Societies from "@/pages/super/Societies";
 import SuperDashboard from "@/pages/super/SuperDashboard";
+import SuperWhatsApp from "@/pages/super/SuperWhatsApp";
 import SuperReports from "@/pages/super/SuperReports";
 import Dashboard from "@/pages/society/Dashboard";
 import Tickets from "@/pages/society/Tickets";
@@ -17,7 +18,6 @@ import Residents from "@/pages/society/Residents";
 import AIActivity from "@/pages/society/AIActivity";
 import ReviewQueue from "@/pages/society/ReviewQueue";
 import Suggestions from "@/pages/society/Suggestions";
-import WhatsApp from "@/pages/society/WhatsApp";
 import Reports from "@/pages/society/Reports";
 
 function Protected({ children }) {
@@ -51,6 +51,7 @@ function App() {
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/super/dashboard" element={<Protected><SuperDashboard /></Protected>} />
             <Route path="/super/societies" element={<Protected><Societies /></Protected>} />
+            <Route path="/super/whatsapp" element={<Protected><SuperWhatsApp /></Protected>} />
             <Route path="/super/reports" element={<Protected><SuperReports /></Protected>} />
             <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
             <Route path="/tickets" element={<Protected><Tickets /></Protected>} />
@@ -59,7 +60,6 @@ function App() {
             <Route path="/ai-activity" element={<Protected><AIActivity /></Protected>} />
             <Route path="/review-queue" element={<Protected><ReviewQueue /></Protected>} />
             <Route path="/suggestions" element={<Protected><Suggestions /></Protected>} />
-            <Route path="/whatsapp" element={<Protected><WhatsApp /></Protected>} />
             <Route path="/reports" element={<Protected><Reports /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

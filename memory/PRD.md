@@ -45,6 +45,11 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
 
+## WhatsApp tab moved to Super Admin (2026-06 update)
+- Removed "WhatsApp" from Society Admin nav; added it to Super Admin nav at `/super/whatsapp` (`pages/super/SuperWhatsApp.jsx`).
+- Super page has a society selector dropdown; the existing WhatsApp config + Live Simulator UI is reused via a refactored `pages/society/WhatsApp.jsx` that accepts `societyId` + `embedded` props (all API calls pass the chosen `society_id`). Backend endpoints already accepted `society_id` — no backend change needed.
+- Verified: selector loads per-society status (Majestique shows its bound Whapi group), embedded UI renders, society nav no longer shows WhatsApp.
+
 ## UI Redesign — Blue/Indigo Dashboards (2026-06 update)
 - Rebranded the ENTIRE app from green/gold to blue/indigo (primary #2563eb, indigo #4f46e5) to match user-uploaded `Propto_Admin_Dashboard.html` reference. Theme driven via CSS vars in `index.css` + `brand.*` tokens in `tailwind.config.js` (kept token names green/gold to avoid touching every page). PROPTO logo kept.
 - New reusable dashboard kit: `components/DashKit.jsx` (TopHeader, DashStat top-bordered stat cards, Panel, PriorityDot, SLABar).

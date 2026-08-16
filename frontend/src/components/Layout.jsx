@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 const SUPER_NAV = [
   { to: "/super/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/super/societies", label: "Societies", icon: Building2 },
+  { to: "/super/whatsapp", label: "WhatsApp", icon: MessageSquare },
   { to: "/super/reports", label: "Analytics", icon: BarChart3 },
 ];
 const SOCIETY_NAV = [
@@ -19,7 +20,6 @@ const SOCIETY_NAV = [
   { to: "/ai-activity", label: "AI Activity", icon: Bot },
   { to: "/review-queue", label: "Review Queue", icon: ClipboardCheck },
   { to: "/suggestions", label: "Suggestions", icon: Vote },
-  { to: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ];
 

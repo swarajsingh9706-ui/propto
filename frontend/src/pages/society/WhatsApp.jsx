@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api, { apiError } from "@/lib/api";
-import { useScope, useFetch } from "@/lib/useScope";
+import { useScope } from "@/lib/useScope";
 import { PageHeader } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,14 @@ const SAMPLES = [
   "Good morning everyone! Have a great day",
 ];
 
-export default function WhatsApp() {
-  const cfg = useScope();
-  const { data: status, loading, reload } = useFetch("/society/whatsapp/status");
+export default function WhatsApp({ societyId = null, embedded = false }) {
+  const scopeCfg = useScope();
+  const cfg = societyId ? { params: { society_id: societyId } } : scopeCfg;
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const reload = () =>
+    api.get("/society/whatsapp/status", cfg).then((r) => setStatus(r.data)).finally(() => setLoading(false));
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [societyId]);
   const [phone, setPhone] = useState("918111111102");
   const [text, setText] = useState(SAMPLES[0]);
   const [sending, setSending] = useState(false);
@@ -64,8 +69,8 @@ export default function WhatsApp() {
   const toggleMon = async () => { try { await api.post("/society/whatsapp/toggle-monitoring", {}, cfg); reload(); } catch (e) { toast.error(apiError(e)); } };
 
   return (
-    <div className="p-8">
-      <PageHeader title="WhatsApp Integration" subtitle="Group & Live Simulator" />
+    <div className={embedded ? "" : "p-8"}>
+      {!embedded && <PageHeader title="WhatsApp Integration" subtitle="Group & Live Simulator" />}
       {loading || !status ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Group connection */}
