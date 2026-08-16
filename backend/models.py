@@ -90,6 +90,7 @@ class ResidentCreate(BaseModel):
     phone: str
     flat: str
     tower: Optional[str] = ""
+    status: Optional[str] = "Owner"
 
 
 class ResidentUpdate(BaseModel):
@@ -97,6 +98,7 @@ class ResidentUpdate(BaseModel):
     phone: Optional[str] = None
     flat: Optional[str] = None
     tower: Optional[str] = None
+    status: Optional[str] = None
 
 
 # ---------- Ticket ----------

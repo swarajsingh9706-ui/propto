@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Loader2, Trash2, Upload, Users } from "lucide-react";
 
-const empty = { name: "", phone: "", flat: "", tower: "" };
+const empty = { name: "", phone: "", flat: "", tower: "", status: "Owner" };
 
 export default function Residents() {
   const cfg = useScope();
@@ -50,13 +51,23 @@ export default function Residents() {
               <div className="col-span-2"><Label className="text-xs">Phone (with country code)</Label><Input data-testid="resident-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="918111111101" className="mt-1" /></div>
               <div><Label className="text-xs">Flat</Label><Input data-testid="resident-flat-input" value={form.flat} onChange={(e) => setForm({ ...form, flat: e.target.value })} placeholder="B302" className="mt-1" /></div>
               <div><Label className="text-xs">Tower</Label><Input value={form.tower} onChange={(e) => setForm({ ...form, tower: e.target.value })} placeholder="B" className="mt-1" /></div>
+              <div className="col-span-2">
+                <Label className="text-xs">Status</Label>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                  <SelectTrigger data-testid="resident-status-select" className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Owner" data-testid="resident-status-owner">Owner</SelectItem>
+                    <SelectItem value="Tenant" data-testid="resident-status-tenant">Tenant</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter><Button data-testid="save-resident-btn" onClick={create} disabled={saving || !form.name || !form.phone}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </PageHeader>
 
-      <p className="mb-4 text-xs text-zinc-400">Excel/CSV columns: <span className="font-mono">name, phone, flat, tower</span></p>
+      <p className="mb-4 text-xs text-zinc-400">Excel/CSV columns: <span className="font-mono">name, phone, flat, tower, status</span></p>
 
       {loading ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : (residents || []).length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-sm text-zinc-400"><Users className="mx-auto mb-3 h-8 w-8 text-zinc-300" />No residents yet.</div>
@@ -64,7 +75,7 @@ export default function Residents() {
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-secondary/50 text-left text-[11px] uppercase tracking-wider text-zinc-500">
-              <tr><th className="px-5 py-3 font-medium">Name</th><th className="px-5 py-3 font-medium">Flat</th><th className="px-5 py-3 font-medium">Tower</th><th className="px-5 py-3 font-medium">Phone</th><th className="px-5 py-3"></th></tr>
+              <tr><th className="px-5 py-3 font-medium">Name</th><th className="px-5 py-3 font-medium">Flat</th><th className="px-5 py-3 font-medium">Tower</th><th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium">Phone</th><th className="px-5 py-3"></th></tr>
             </thead>
             <tbody>
               {residents.map((r) => (
@@ -72,6 +83,14 @@ export default function Residents() {
                   <td className="px-5 py-3 font-medium">{r.name}</td>
                   <td className="px-5 py-3 text-zinc-600">{r.flat || "—"}</td>
                   <td className="px-5 py-3 text-zinc-600">{r.tower || "—"}</td>
+                  <td className="px-5 py-3" data-testid={`resident-status-${r.id}`}>
+                    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                      (r.status || "Owner") === "Tenant"
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                        : "border-blue-200 bg-blue-50 text-blue-700"}`}>
+                      {r.status || "Owner"}
+                    </span>
+                  </td>
                   <td className="px-5 py-3 font-mono text-xs text-zinc-500">{r.phone}</td>
                   <td className="px-5 py-3 text-right"><button data-testid={`delete-resident-${r.id}`} onClick={() => del(r)} className="text-zinc-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button></td>
                 </tr>

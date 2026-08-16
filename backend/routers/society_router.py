@@ -147,6 +147,7 @@ async def import_residents(file: UploadFile = File(...), society_id: str = None,
             "name": name, "phone": phone,
             "flat": str(row.get("flat", "")).strip().replace(".0", ""),
             "tower": str(row.get("tower", "")).strip(),
+            "status": (str(row.get("status", "")).strip().title() or "Owner") if str(row.get("status", "")).strip().lower() in ("owner", "tenant") else "Owner",
             "society_id": sid, "created_at": now_iso(),
         })
         inserted += 1
