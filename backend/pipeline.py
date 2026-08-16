@@ -8,6 +8,7 @@ from db import db
 from models import now_iso
 import ai_engine
 import whatsapp_client as wa
+import audit
 
 logger = logging.getLogger("propto.pipeline")
 
@@ -77,7 +78,7 @@ async def add_timeline(ticket_id: str, event: str, detail: str = ""):
     )
 
 
-async def assign_vendor(ticket: dict, vendor: dict):
+async def assign_vendor(ticket: dict, vendor: dict, actor: str = "AI (auto-route)"):
     tid = str(ticket["_id"])
     await db.tickets.update_one(
         {"_id": ObjectId(tid)},
@@ -85,6 +86,9 @@ async def assign_vendor(ticket: dict, vendor: dict):
                   "status": "Pending", "updated_at": now_iso()}},
     )
     await add_timeline(tid, "Vendor Assigned", f"{vendor['name']} assigned")
+    await audit.log(ticket.get("society_id"), "vendor_assigned",
+                    f"{vendor['name']} assigned to {ticket.get('ticket_number')} ({ticket.get('category')})",
+                    actor=actor, category="vendor", ticket_number=ticket.get("ticket_number"))
     await wa.send_buttons(
         vendor["phone"],
         f"New job: {ticket['category']} at Flat {ticket.get('flat','?')} ({ticket['priority']} priority). {ticket['description']}",
@@ -126,6 +130,10 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
     doc["sla_due"] = (datetime.now(timezone.utc) + timedelta(hours=doc["sla_hours"])).isoformat()
     res = await db.tickets.insert_one(doc)
     doc["_id"] = res.inserted_id
+    await audit.log(society_id, "ticket_created",
+                    f"Ticket {doc['ticket_number']} raised: {doc['category']} · Flat {doc['flat'] or '—'} ({doc['priority']})",
+                    actor=(resident["name"] if resident else "WhatsApp user"),
+                    category="ticket", ticket_number=doc["ticket_number"])
     # Route to a vendor using the mapped app-category (Excel categories are granular).
     routing_cat = ai.get("routing_category") or doc["category"]
     vendor = await pick_vendor(society_id, routing_cat)

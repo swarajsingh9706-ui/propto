@@ -168,6 +168,7 @@ async def startup():
     await db.tickets.create_index("society_id")
     await db.vendors.create_index("society_id")
     await db.residents.create_index("society_id")
+    await db.audit_logs.create_index("society_id")
     await seed_super_admin()
     await seed_demo()
     await seed_suggestions()

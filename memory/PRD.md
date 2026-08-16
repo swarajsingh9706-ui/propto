@@ -45,6 +45,12 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
 
+## Audit Log per society (2026-06 update)
+- New `audit.py` best-effort logger writes to `audit_logs` collection (society_id, category, action, summary, actor, ticket_number, meta, created_at). Never raises.
+- Instrumented events: ticket raised, vendor auto-assigned & manually assigned, vendor accepted/rejected/resolved via WhatsApp, admin ticket status change/close, resident added/updated/removed, vendor added/updated/removed, suggestion created & status change, WhatsApp group connected & monitoring toggled, society created.
+- Endpoint `GET /api/society/audit` (society-scoped, optional `category`, limit). Frontend `pages/society/AuditLog.jsx` at `/audit` (new "Audit Log" nav item) — filter chips + timeline with per-category icons/colors, actor and relative time.
+- Verified e2e: events recorded with correct actor and rendered in UI.
+
 ## WhatsApp tab moved to Super Admin (2026-06 update)
 - Removed "WhatsApp" from Society Admin nav; added it to Super Admin nav at `/super/whatsapp` (`pages/super/SuperWhatsApp.jsx`).
 - Super page has a society selector dropdown; the existing WhatsApp config + Live Simulator UI is reused via a refactored `pages/society/WhatsApp.jsx` that accepts `societyId` + `embedded` props (all API calls pass the chosen `society_id`). Backend endpoints already accepted `society_id` — no backend change needed.

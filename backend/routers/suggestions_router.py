@@ -6,6 +6,7 @@ from db import db
 from models import SuggestionCreate, SuggestionStatusUpdate, SuggestionVote, now_iso
 from auth_utils import require_society_admin, user_society_id
 import whatsapp_client as wa
+import audit
 
 router = APIRouter(prefix="/api/society/suggestions", tags=["suggestions"])
 
@@ -67,6 +68,7 @@ async def create_suggestion(body: SuggestionCreate, society_id: str = None, user
     out = _clean(doc)
     out["poll_posted"] = posted
     out["poll_message_id"] = poll_msg_id
+    await audit.log(sid, "suggestion_created", f"Suggestion posted: {body.title}", actor=body.author_name or "Admin", category="suggestion")
     return out
 
 
@@ -76,6 +78,8 @@ async def update_status(sug_id: str, body: SuggestionStatusUpdate, user: dict = 
     s = await db.suggestions.find_one({"_id": ObjectId(sug_id)})
     if not s:
         raise HTTPException(status_code=404, detail="Suggestion not found")
+    actor = user.get("name") or user.get("email") or "Admin"
+    await audit.log(s.get("society_id"), "suggestion_status_changed", f"Suggestion '{s.get('title')}' marked {body.status}", actor=actor, category="suggestion")
     return _clean(s)
 
 

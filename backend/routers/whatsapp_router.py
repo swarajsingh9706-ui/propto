@@ -10,6 +10,7 @@ from models import SimulateMessage, GroupConnect, TestSend, now_iso
 from auth_utils import require_society_admin, user_society_id, get_current_user
 import whatsapp_client as wa
 import pipeline
+import audit
 
 router = APIRouter(tags=["whatsapp"])
 logger = logging.getLogger("propto.whatsapp_router")
@@ -91,10 +92,12 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
         await pipeline.add_timeline(tid, "Vendor Accepted", f"{vname} accepted the job")
         await _ack(phone, f"👍 Thanks! You've *accepted* {num} ({cat} · Flat {flat}). Please visit and reply *DONE* once resolved.")
         await _notify_followers(ticket, f"👷 {vname} accepted {num} and will attend to the {cat} issue at Flat {flat} shortly.")
+        await audit.log(society_id, "vendor_accepted", f"{vname} accepted {num} ({cat} · Flat {flat}) via WhatsApp", actor=vname, category="vendor", ticket_number=num)
 
     elif action == "reject":
         await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "awaiting_vendor_time": False, "updated_at": now_iso()}})
         await pipeline.add_timeline(tid, "Vendor Rejected", f"{vname} declined the job")
+        await audit.log(society_id, "vendor_rejected", f"{vname} declined {num} via WhatsApp", actor=vname, category="vendor", ticket_number=num)
         await _ack(phone, f"No problem — you've *declined* {num}. We'll reassign it.")
         fresh = await db.tickets.find_one({"_id": ticket["_id"]})
         newv = await pipeline.pick_vendor(society_id, cat, exclude_id=str(ticket.get("vendor_id")) if ticket.get("vendor_id") else None)
@@ -107,6 +110,7 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
     elif action == "resolve":
         await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Resolved", "awaiting_vendor_time": False, "updated_at": now_iso()}})
         await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by {vname}")
+        await audit.log(society_id, "ticket_resolved", f"{num} ({cat} · Flat {flat}) marked resolved by {vname} via WhatsApp", actor=vname, category="ticket", ticket_number=num)
         await _ack(phone, f"✅ Marked {num} as *resolved*. Thank you!")
         await _notify_followers(ticket, f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}. We'd love your feedback!")
 
@@ -284,6 +288,8 @@ async def wa_connect(body: GroupConnect, society_id: str = None, user: dict = De
                                      "phone_number_id": os.environ.get("WHATSAPP_PHONE_ID", "")},
                   "monitoring": True}},
     )
+    actor = user.get("name") or user.get("email") or "Admin"
+    await audit.log(sid, "whatsapp_group_connected", f"WhatsApp group '{body.group_name}' connected", actor=actor, category="whatsapp")
     return {"status": "connected"}
 
 
@@ -293,6 +299,8 @@ async def toggle_monitoring(society_id: str = None, user: dict = Depends(require
     s = await db.societies.find_one({"_id": ObjectId(sid)})
     new_val = not s.get("monitoring", False)
     await db.societies.update_one({"_id": ObjectId(sid)}, {"$set": {"monitoring": new_val}})
+    actor = user.get("name") or user.get("email") or "Admin"
+    await audit.log(sid, "whatsapp_monitoring_toggled", f"Group monitoring {'enabled' if new_val else 'disabled'}", actor=actor, category="whatsapp")
     return {"monitoring": new_val}
 
 

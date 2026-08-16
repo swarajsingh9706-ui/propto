@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from db import db, COMPLAINT_CATEGORIES
 from models import SocietyCreate, SocietyUpdate, now_iso
 from auth_utils import require_super_admin, hash_password
+import audit
 
 router = APIRouter(prefix="/api/super", tags=["super_admin"])
 
@@ -49,6 +50,8 @@ async def create_society(body: SocietyCreate, user: dict = Depends(require_super
             "society_id": sid, "created_at": now_iso(),
         })
     doc["_id"] = res.inserted_id
+    actor = user.get("name") or user.get("email") or "Super Admin"
+    await audit.log(sid, "society_created", f"Society '{body.name}' ({body.code.upper()}) created", actor=actor, category="society")
     return _clean(doc)
 
 

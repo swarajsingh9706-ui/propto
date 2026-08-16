@@ -8,6 +8,7 @@ from models import (VendorCreate, VendorUpdate, ResidentCreate, ResidentUpdate,
                     TicketAssign, TicketUpdate, now_iso)
 from auth_utils import require_society_admin, user_society_id
 import pipeline
+import audit
 
 router = APIRouter(prefix="/api/society", tags=["society_admin"])
 
@@ -20,6 +21,21 @@ def _clean(doc):
 def _sid(user):
     # super_admin may pass ?society_id filter via society scoping; society_admin uses own
     return user_society_id(user) if user["role"] == "society_admin" else user.get("society_id")
+
+
+def _actor(user):
+    return user.get("name") or user.get("email") or user.get("role", "admin")
+
+
+@router.get("/audit")
+async def audit_log(society_id: str = None, category: str = None, limit: int = 300, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    q = {"society_id": sid}
+    if category and category != "all":
+        q["category"] = category
+    return [_clean(d) for d in await db.audit_logs.find(q).sort("created_at", -1).to_list(limit)]
 
 
 # ---------------- Dashboard ----------------
@@ -77,6 +93,7 @@ async def create_vendor(body: VendorCreate, society_id: str = None, user: dict =
     doc.update({"society_id": sid, "created_at": now_iso()})
     res = await db.vendors.insert_one(doc)
     doc["_id"] = res.inserted_id
+    await audit.log(sid, "vendor_added", f"Vendor {doc.get('name')} added ({', '.join(doc.get('categories') or []) or 'general'})", actor=_actor(user), category="vendor")
     return _clean(doc)
 
 
@@ -85,12 +102,16 @@ async def update_vendor(vendor_id: str, body: VendorUpdate, user: dict = Depends
     updates = body.model_dump(exclude_none=True)
     await db.vendors.update_one({"_id": ObjectId(vendor_id)}, {"$set": updates})
     v = await db.vendors.find_one({"_id": ObjectId(vendor_id)})
+    await audit.log(v.get("society_id"), "vendor_updated", f"Vendor {v.get('name')} details updated", actor=_actor(user), category="vendor")
     return _clean(v)
 
 
 @router.delete("/vendors/{vendor_id}")
 async def delete_vendor(vendor_id: str, user: dict = Depends(require_society_admin)):
+    v = await db.vendors.find_one({"_id": ObjectId(vendor_id)})
     await db.vendors.delete_one({"_id": ObjectId(vendor_id)})
+    if v:
+        await audit.log(v.get("society_id"), "vendor_removed", f"Vendor {v.get('name')} removed", actor=_actor(user), category="vendor")
     return {"status": "deleted"}
 
 
@@ -108,6 +129,7 @@ async def create_resident(body: ResidentCreate, society_id: str = None, user: di
     doc.update({"society_id": sid, "created_at": now_iso()})
     res = await db.residents.insert_one(doc)
     doc["_id"] = res.inserted_id
+    await audit.log(sid, "resident_added", f"Resident {doc.get('name')} ({doc.get('flat') or '—'}) added as {doc.get('status') or 'Owner'}", actor=_actor(user), category="resident")
     return _clean(doc)
 
 
@@ -115,12 +137,16 @@ async def create_resident(body: ResidentCreate, society_id: str = None, user: di
 async def update_resident(resident_id: str, body: ResidentUpdate, user: dict = Depends(require_society_admin)):
     await db.residents.update_one({"_id": ObjectId(resident_id)}, {"$set": body.model_dump(exclude_none=True)})
     r = await db.residents.find_one({"_id": ObjectId(resident_id)})
+    await audit.log(r.get("society_id"), "resident_updated", f"Resident {r.get('name')} ({r.get('flat') or '—'}) updated", actor=_actor(user), category="resident")
     return _clean(r)
 
 
 @router.delete("/residents/{resident_id}")
 async def delete_resident(resident_id: str, user: dict = Depends(require_society_admin)):
+    r = await db.residents.find_one({"_id": ObjectId(resident_id)})
     await db.residents.delete_one({"_id": ObjectId(resident_id)})
+    if r:
+        await audit.log(r.get("society_id"), "resident_removed", f"Resident {r.get('name')} ({r.get('flat') or '—'}) removed", actor=_actor(user), category="resident")
     return {"status": "deleted"}
 
 
@@ -190,7 +216,7 @@ async def assign(ticket_id: str, body: TicketAssign, user: dict = Depends(requir
     v = await db.vendors.find_one({"_id": ObjectId(body.vendor_id)})
     if not v:
         raise HTTPException(status_code=404, detail="Vendor not found")
-    await pipeline.assign_vendor(t, v)
+    await pipeline.assign_vendor(t, v, actor=_actor(user))
     return _clean(await db.tickets.find_one({"_id": ObjectId(ticket_id)}))
 
 
@@ -201,9 +227,11 @@ async def update_ticket(ticket_id: str, body: TicketUpdate, user: dict = Depends
         raise HTTPException(status_code=400, detail="No fields")
     updates["updated_at"] = now_iso()
     await db.tickets.update_one({"_id": ObjectId(ticket_id)}, {"$set": updates})
+    t2 = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
     if "status" in updates:
         await pipeline.add_timeline(ticket_id, f"Status: {updates['status']}", "Updated by admin")
-    return _clean(await db.tickets.find_one({"_id": ObjectId(ticket_id)}))
+        await audit.log(t2.get("society_id"), "ticket_status_changed", f"{t2.get('ticket_number')} status changed to {updates['status']}", actor=_actor(user), category="ticket", ticket_number=t2.get("ticket_number"))
+    return _clean(t2)
 
 
 @router.post("/tickets/{ticket_id}/close")
@@ -211,6 +239,7 @@ async def close_ticket(ticket_id: str, user: dict = Depends(require_society_admi
     await db.tickets.update_one({"_id": ObjectId(ticket_id)}, {"$set": {"status": "Resolved", "updated_at": now_iso()}})
     await pipeline.add_timeline(ticket_id, "Ticket Closed", "Marked resolved by admin")
     t = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+    await audit.log(t.get("society_id"), "ticket_resolved", f"{t.get('ticket_number')} marked resolved by admin", actor=_actor(user), category="ticket", ticket_number=t.get("ticket_number"))
     if t.get("resident_phone"):
         import whatsapp_client as wa
         await wa.send_text(t["resident_phone"], f"Your ticket {t['ticket_number']} has been resolved. Please share feedback!")

@@ -18,6 +18,7 @@ import Residents from "@/pages/society/Residents";
 import AIActivity from "@/pages/society/AIActivity";
 import ReviewQueue from "@/pages/society/ReviewQueue";
 import Suggestions from "@/pages/society/Suggestions";
+import AuditLog from "@/pages/society/AuditLog";
 import Reports from "@/pages/society/Reports";
 
 function Protected({ children }) {
@@ -60,6 +61,7 @@ function App() {
             <Route path="/ai-activity" element={<Protected><AIActivity /></Protected>} />
             <Route path="/review-queue" element={<Protected><ReviewQueue /></Protected>} />
             <Route path="/suggestions" element={<Protected><Suggestions /></Protected>} />
+            <Route path="/audit" element={<Protected><AuditLog /></Protected>} />
             <Route path="/reports" element={<Protected><Reports /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
