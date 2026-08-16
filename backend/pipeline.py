@@ -121,6 +121,9 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
         "ai_confidence": ai.get("confidence", 0),
         "vendor_id": None,
         "vendor_name": None,
+        "assigned_to": None,
+        "handled_by": ai.get("handled_by") or "",
+        "vendor_required": ai.get("vendor_required") or "",
         "raw_message": raw_text,
         "sla_hours": SLA_HOURS.get(ai.get("priority") or "Medium", 24),
         "created_at": now_iso(),
@@ -134,17 +137,34 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
                     f"Ticket {doc['ticket_number']} raised: {doc['category']} · Flat {doc['flat'] or '—'} ({doc['priority']})",
                     actor=(resident["name"] if resident else "WhatsApp user"),
                     category="ticket", ticket_number=doc["ticket_number"])
-    # Route to a vendor using the mapped app-category (Excel categories are granular).
-    routing_cat = ai.get("routing_category") or doc["category"]
-    vendor = await pick_vendor(society_id, routing_cat)
-    if vendor:
-        await assign_vendor(doc, vendor)
+    # Route based on the taxonomy "Handled By". Society Manager issues stay in-house;
+    # everything else auto-routes to a matching vendor.
+    tid = str(doc["_id"])
+    handled_by = doc["handled_by"]
+    vendor = None
+    if handled_by == "Society Manager":
+        await db.tickets.update_one({"_id": doc["_id"]}, {"$set": {"status": "Pending", "assigned_to": "Society Manager", "updated_at": now_iso()}})
+        doc["status"] = "Pending"
+        doc["assigned_to"] = "Society Manager"
+        await add_timeline(tid, "Assigned to Society Manager", "Handled in-house by the society manager")
+        await audit.log(society_id, "ticket_assigned_manager",
+                        f"{doc['ticket_number']} routed to the Society Manager (in-house)",
+                        actor="AI (taxonomy)", category="ticket", ticket_number=doc["ticket_number"])
+        assigned_line = "Assigned to: Society Manager (handled in-house)."
+    else:
+        routing_cat = ai.get("routing_category") or doc["category"]
+        vendor = await pick_vendor(society_id, routing_cat)
+        if vendor:
+            await assign_vendor(doc, vendor)
+            assigned_line = f"Assigned to: {vendor['name']}. They'll reach out shortly."
+        else:
+            assigned_line = "A vendor will be assigned shortly."
     who = (resident["name"] + ", " if resident else "")
     confirm_msg = (
         f"✅ {who}we've logged your {doc['category']} complaint.\n"
         f"Ticket: {doc['ticket_number']}\n"
         f"Flat: {doc['flat'] or '—'}  |  Priority: {doc['priority']}\n"
-        + (f"Assigned to: {vendor['name']}. They'll reach out shortly." if vendor else "A vendor will be assigned shortly.")
+        + assigned_line
     )
     # Prefer replying in the group (quoting the original message); else private 1:1 to resident.
     if notify_to:

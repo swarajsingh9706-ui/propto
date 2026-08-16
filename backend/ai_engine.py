@@ -66,7 +66,25 @@ Analyze the message and respond ONLY with a strict minified JSON object, no mark
 High priority = safety/urgent (no water, no power, lift stuck, security, gas). Medium = normal repairs. Low = minor/cosmetic."""
 
 
-async def analyze_message(text: str) -> dict:
+def _extract_unit(text: str):
+    """Lightweight flat/tower extraction used when the Excel taxonomy matches (no AI needed)."""
+    t = text or ""
+    flat, tower = "", ""
+    m = re.search(r"\b([A-Za-z])[-\s]?(\d{2,4})\b", t)
+    if m:
+        tower = m.group(1).upper()
+        flat = (m.group(1) + m.group(2)).upper()
+    else:
+        m2 = re.search(r"(?:flat|unit|apartment|apt|house)\s*(?:no\.?)?\s*([A-Za-z]?-?\d{1,4})", t, re.I)
+        if m2:
+            flat = m2.group(1).upper().replace("-", "")
+    mt = re.search(r"(?:tower|block|wing)\s*([A-Za-z0-9]{1,3})", t, re.I)
+    if mt:
+        tower = mt.group(1).upper()
+    return flat, tower
+
+
+async def _ai_classify(text: str) -> dict:
     api_key = os.environ["EMERGENT_LLM_KEY"]
     chat = LlmChat(
         api_key=api_key,
@@ -97,27 +115,34 @@ async def analyze_message(text: str) -> dict:
         data["confidence"] = 0.0
     if data.get("category") not in COMPLAINT_CATEGORIES:
         data["category"] = data.get("category") or ""
-    # Match against the 500-situation knowledge base. On a confident match the
-    # Excel category/sub-category/priority take precedence over the AI guess.
-    try:
-        import situations_kb
-        kb = situations_kb.match(text)
-        if kb:
-            # Excel is authoritative: show the exact Excel category + priority.
-            if kb.get("kb_category"):
-                data["category"] = kb["kb_category"]
-            if kb.get("priority"):
-                data["priority"] = kb["priority"]
-            data["routing_category"] = kb.get("app_category") or ""
-            data["sub_category"] = kb.get("sub_category") or ""
-            data["kb_category"] = kb.get("kb_category") or ""
-            data["matched_situation"] = kb.get("situation")
-            data["kb_score"] = kb.get("score")
-            # A KB hit means it is a genuine maintenance situation.
-            if data.get("intent") != "Complaint":
-                data["intent"] = "Complaint"
-            if float(data.get("confidence", 0)) < 0.7:
-                data["confidence"] = 0.75
-    except Exception:
-        pass
+    data["source_of_truth"] = "ai"
     return data
+
+
+async def analyze_message(text: str) -> dict:
+    # 1) Check the 1,000-row taxonomy Excel FIRST. If the issue is present, use its
+    #    category / sub-category / severity / handled-by / vendor directly.
+    import situations_kb
+    kb = situations_kb.match(text)
+    if kb:
+        flat, tower = _extract_unit(text)
+        return {
+            "intent": "Complaint",
+            "category": kb["category"],
+            "sub_category": kb.get("sub_category", ""),
+            "flat": flat,
+            "tower": tower,
+            "priority": kb["priority"],
+            "preferred_time": "",
+            "description": text[:150],
+            "confidence": 0.9,
+            "routing_category": kb.get("app_category", ""),
+            "kb_category": kb["category"],
+            "matched_situation": kb.get("subcategory"),
+            "kb_score": kb.get("score"),
+            "handled_by": kb.get("handled_by", ""),
+            "vendor_required": kb.get("vendor_required", ""),
+            "source_of_truth": "excel",
+        }
+    # 2) Not in the taxonomy -> fall back to AI.
+    return await _ai_classify(text)

@@ -45,6 +45,13 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
 
+## Taxonomy Excel upgraded to 1,000 rows + Excel-first routing (2026-06 update)
+- Replaced the old 500-situation `Issues.xlsx` with `Propto_Taxonomy_1000.xlsx` (sheet "Taxonomy (All)", 1000 rows, 41 categories). Only 5 columns used: Category, Subcategory, Severity, Vendor Required, Handled By. Cached at `backend/data/taxonomy.json`.
+- **Excel-first**: `ai_engine.analyze_message` now checks the taxonomy FIRST (fuzzy match by Subcategory, threshold 0.6). On a match it uses the Excel category/sub-category/severity + regex flat extraction — no AI call. Only when there is NO match does it fall back to the Gemini AI classifier. Result carries `source_of_truth` = "excel" | "ai".
+- **Handled By routing** in `pipeline.create_ticket`: "Society Manager" → ticket kept in-house (`assigned_to=Society Manager`, no vendor dispatch); "Vendor Assignment"/"Manager + Vendor" → auto-route to a matching vendor via app-category mapping. Ticket now stores `handled_by`, `vendor_required`, `assigned_to`.
+- Category (41) mapped to app's vendor-routing enum via `_CAT_MAP`. Severity Critical→SLA 2h.
+- Verified e2e: "Booster pump not working" → Water Supply/High/Vendor Assignment → AquaFix assigned; "water timing dispute" → Water Supply/Low/Society Manager → assigned_to Society Manager, no vendor.
+
 ## Audit Log per society (2026-06 update)
 - New `audit.py` best-effort logger writes to `audit_logs` collection (society_id, category, action, summary, actor, ticket_number, meta, created_at). Never raises.
 - Instrumented events: ticket raised, vendor auto-assigned & manually assigned, vendor accepted/rejected/resolved via WhatsApp, admin ticket status change/close, resident added/updated/removed, vendor added/updated/removed, suggestion created & status change, WhatsApp group connected & monitoring toggled, society created.
