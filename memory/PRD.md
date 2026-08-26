@@ -45,6 +45,13 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
 
+## Self-host / cPanel deployment prep (2026-06 update)
+- `backend/passenger_wsgi.py`: cPanel Passenger (WSGI) entry — wraps the FastAPI ASGI app via `a2wsgi`.
+- `backend/seed.py`: one-time DB seeding for self-host (`python seed.py`).
+- `backend/requirements-cpanel.txt`: requirements minus Emergent-only pkgs (`emergentintegrations`, custom `litellm`), plus `a2wsgi`.
+- `ai_engine.py`: `emergentintegrations` import is now lazy; new `GEMINI_API_KEY` path uses `google-generativeai` (own key) for self-host, else Emergent LLM key. Both paths verified.
+- `/app/DEPLOYMENT_CPANEL.md`: full step-by-step (MongoDB Atlas, Setup Python App, env vars, seed, frontend build+.htaccess SPA, webhook re-point). cPanel cannot host MongoDB (use Atlas) and needs the "Setup Python App" feature.
+
 ## Taxonomy Excel upgraded to 1,000 rows + Excel-first routing (2026-06 update)
 - Replaced the old 500-situation `Issues.xlsx` with `Propto_Taxonomy_1000.xlsx` (sheet "Taxonomy (All)", 1000 rows, 41 categories). Only 5 columns used: Category, Subcategory, Severity, Vendor Required, Handled By. Cached at `backend/data/taxonomy.json`.
 - **Excel-first**: `ai_engine.analyze_message` now checks the taxonomy FIRST (fuzzy match by Subcategory, threshold 0.6). On a match it uses the Excel category/sub-category/severity + regex flat extraction — no AI call. Only when there is NO match does it fall back to the Gemini AI classifier. Result carries `source_of_truth` = "excel" | "ai".

@@ -1,7 +1,7 @@
 import os
 import json
 import re
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+import asyncio
 from db import COMPLAINT_CATEGORIES
 
 GREETING_WORDS = [
@@ -84,15 +84,31 @@ def _extract_unit(text: str):
     return flat, tower
 
 
-async def _ai_classify(text: str) -> dict:
-    api_key = os.environ["EMERGENT_LLM_KEY"]
+async def _call_llm(text: str) -> str:
+    """Use the user's own Gemini key when self-hosting; else the Emergent LLM key."""
+    gkey = os.environ.get("GEMINI_API_KEY")
+    if gkey:
+        return await asyncio.to_thread(_gemini_native, text, gkey)
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
     chat = LlmChat(
-        api_key=api_key,
+        api_key=os.environ["EMERGENT_LLM_KEY"],
         session_id="propto-ai",
         system_message=SYSTEM_PROMPT,
     ).with_model("gemini", "gemini-2.5-flash")
     resp = await chat.send_message(UserMessage(text=f"Message: {text}"))
-    raw = resp if isinstance(resp, str) else str(resp)
+    return resp if isinstance(resp, str) else str(resp)
+
+
+def _gemini_native(text: str, key: str) -> str:
+    import google.generativeai as genai
+    genai.configure(api_key=key)
+    model = genai.GenerativeModel("gemini-2.5-flash", system_instruction=SYSTEM_PROMPT)
+    resp = model.generate_content(f"Message: {text}")
+    return getattr(resp, "text", "") or ""
+
+
+async def _ai_classify(text: str) -> dict:
+    raw = await _call_llm(text)
     cleaned = raw.strip().replace("```json", "").replace("```", "").strip()
     m = re.search(r"\{.*\}", cleaned, re.DOTALL)
     if m:
