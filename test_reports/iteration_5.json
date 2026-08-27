@@ -1,0 +1,45 @@
+{
+  "summary": "Backend-only verification of the Whapi webhook 500-error fix plus AI pipeline regression and auth-playbook checks on the preview backend (REACT_APP_BACKEND_URL). 34 tests executed across 3 pytest files: 11 Whapi webhook robustness tests (empty/no-content-type/malformed/form-encoded/{}/array/null bodies, realistic group payload from an unmapped group, DM payload, PUT poll update, PATCH, GET), 4 Meta webhook regression tests, 1 mapped-group end-to-end test (webhook -> AI pipeline -> ticket created), 5 pipeline regression tests (Excel taxonomy match with source_of_truth=excel, free-form AI classification, non-complaint ignored, no ObjectId leak, persistence), 4 ai_engine._call_llm graceful-degradation unit tests (no keys / emergentintegrations missing / invalid Gemini key), and 7 auth tests. Result: the webhook fix is verified — /api/whapi/webhook returned HTTP 200 {status: ok} for EVERY payload variant, including ones where the outbound Whapi send failed with 400 (logs confirm 'send_text delivery failed' was swallowed and the webhook still returned 200). _call_llm returns '' instead of raising when no LLM is configured. Pipeline regression is clean. Two pre-existing auth-hardening gaps found (CORS wildcard with credentials, no brute-force lockout).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/webhook (Meta)", "issue": "Same class of bug the Whapi fix addressed is still present here: verify_signature() returns True when WHATSAPP_APP_SECRET is unset (self-host default), then `await request.json()` runs unguarded -> an empty/malformed Meta test-ping would raise and return HTTP 500. Wrap json parse + processing in try/except and always return 200 like whapi_webhook. (Cannot reproduce in preview because WHATSAPP_APP_SECRET is set, so probes get 401.)"},
+      {"endpoint": "CORS (server.py:46-52)", "issue": "allow_credentials=True combined with Access-Control-Allow-Origin '*' (CORS_ORIGINS='*'). Verified on an actual login response: ACAO '*' + ACAC 'true'. Browsers reject credentialed cross-origin requests with a wildcard, so the httpOnly access_token cookie set at login is unusable cross-origin; app only works because the frontend uses the Bearer token. Set explicit origins in CORS_ORIGINS."},
+      {"endpoint": "POST /api/auth/login", "issue": "No brute-force lockout / rate limiting: 7 consecutive failed logins for the same email all returned 401 (playbook requires lockout after 5 failures, 423/429)."},
+      {"endpoint": "GET /api/whapi/webhook", "issue": "Returns 405 (only POST/PUT/PATCH registered). Not a 500 and Whapi does not GET, but a user pasting the URL in a browser sees 405 — consider a GET handler returning 200 for easier self-host diagnosis."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_whapi_webhook.py",
+    "/app/backend/tests/test_ai_engine_fallback.py",
+    "/app/backend/tests/test_auth_playbook.py",
+    "/app/test_reports/pytest/whapi_results.xml",
+    "/app/test_reports/pytest/auth_results.xml"
+  ],
+  "action_items": [
+    "Apply the same always-return-200 hardening to the Meta webhook POST /api/webhook (unguarded await request.json() after a permissive signature check).",
+    "Set explicit CORS_ORIGINS (no '*') since allow_credentials=True, otherwise the httpOnly login cookie cannot be used cross-origin.",
+    "Add login rate limiting/lockout after 5 failed attempts (playbook requirement).",
+    "Optional: add a GET handler on /api/whapi/webhook returning 200 so self-host users can verify the URL in a browser."
+  ],
+  "critical_code_review_comments": [
+    "whapi_webhook() correctly wraps both json parsing and processing and always returns {status: ok} — verified; keep the broad except but it currently logs via logger.exception which is right.",
+    "ai_engine._call_llm now degrades to '' for: no keys, missing emergentintegrations module, and invalid GEMINI_API_KEY (all three unit-verified). analyze_message() still returns a valid dict with 'intent' when the LLM is unavailable.",
+    "Outbound Whapi failures are truly best-effort: log shows 'send_text delivery failed to=<fake group> 400' while the webhook response stayed 200.",
+    "Meta receive_webhook() is the remaining unguarded webhook; it should mirror the Whapi implementation.",
+    "routing_category can disagree with kb_category (e.g. category 'HVAC / Ventilation' routed to 'Electrical', 'Sewage' routed to 'Plumbing') — verify this mapping is intentional."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_whapi_webhook.py",
+    "/app/backend/tests/test_ai_engine_fallback.py",
+    "/app/backend/tests/test_auth_playbook.py"
+  ],
+  "success_rate": {"backend": "94% (32/34: 2 failures are the pre-existing CORS-wildcard and missing-lockout assertions, not regressions)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Temporarily mapped Green Valley Residency's WhatsApp group to a test chat id for the e2e webhook test and restored the original mapping (GV-GROUP-001) afterwards — verified in DB. All 7 tickets created during testing (TKT-260827-4E7C8, 57A40, E7A32, 07D2C, 00B56, 44AC5, 90A86) were deleted from MongoDB; 0 test tickets remain.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@greenvalley.com / Admin@123 (society_admin), superadmin@propto.com / Propto@123 (super_admin) — both verified working; bcrypt hashes are $2b$ format; login sets httpOnly+Secure access_token cookie; seed_super_admin is idempotent and updates the hash when ADMIN_PASSWORD changes.",
+  "context_for_next_testing_agent": "Whapi webhook robustness suite lives in /app/backend/tests/test_whapi_webhook.py (run with -n 0 to avoid duplicate-detection races between the simulate tests and the e2e group test — the pipeline dedupes same category+flat complaints, so reuse of 'Booster pump not working' returns status='duplicate' rather than 'ticket_created'). Simulate responses use key 'status' (ticket_created|duplicate|review_queued|ignored), not 'action'. Ticket list endpoint is GET /api/society/tickets (no DELETE endpoint exists — clean up tickets directly in MongoDB). Whapi outbound sends really hit gate.whapi.cloud in this env and echo back into our webhook.",
+  "rca_of_the_issue": "Original 500 was caused by (a) unguarded await request.json() on Whapi's empty test ping, (b) _call_llm raising when neither GEMINI_API_KEY nor emergentintegrations was available on cPanel, and (c) outbound send exceptions bubbling out of create_ticket. All three paths are now guarded and code-level verified on the preview backend: every payload variant (empty, non-JSON, form-encoded, null, array, {}, realistic group message, poll PUT, PATCH, button reply for a non-existent ticket) returns 200 {status: ok}, and unit tests confirm _call_llm returns '' instead of raising for the self-host configurations. The user's cPanel host could not be reached (per instructions)."
+}

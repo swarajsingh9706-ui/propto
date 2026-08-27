@@ -167,10 +167,13 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
         + assigned_line
     )
     # Prefer replying in the group (quoting the original message); else private 1:1 to resident.
-    if notify_to:
-        await wa.send_text(notify_to, confirm_msg, reply_to=notify_reply_to)
-    elif resident and resident.get("phone"):
-        await wa.send_text(resident["phone"], confirm_msg)
+    try:
+        if notify_to:
+            await wa.send_text(notify_to, confirm_msg, reply_to=notify_reply_to)
+        elif resident and resident.get("phone"):
+            await wa.send_text(resident["phone"], confirm_msg)
+    except Exception as e:
+        logger.warning("confirmation send failed: %s", e)
     return doc
 
 

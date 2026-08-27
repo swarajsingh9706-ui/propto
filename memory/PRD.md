@@ -45,6 +45,12 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
 
+## Webhook 500 hardening (self-host fix, 2026-06 update)
+- Fixed Whapi webhook (`/api/whapi/webhook`) returning 500 on self-host: now wraps JSON parse + processing in try/except and ALWAYS returns 200 {status: ok} (tolerates empty/malformed Whapi test pings). Same hardening applied to Meta webhook (`/api/webhook`).
+- `ai_engine._call_llm` degrades gracefully: uses `GEMINI_API_KEY` (own Gemini) if set, else Emergent key; returns "" instead of crashing when no LLM/emergentintegrations is available (self-host without a key → message ignored, not 500).
+- `pipeline.create_ticket` confirmation send is best-effort (Whapi send failure can't crash ticket creation).
+- Verified by testing_agent (iteration_5.json): all webhook payload variants return 200; AI pipeline regression clean. NOTE for self-host: set `GEMINI_API_KEY` on the server so non-taxonomy messages still get AI-classified.
+
 ## Self-host / cPanel deployment prep (2026-06 update)
 - `backend/passenger_wsgi.py`: cPanel Passenger (WSGI) entry — wraps the FastAPI ASGI app via `a2wsgi`.
 - `backend/seed.py`: one-time DB seeding for self-host (`python seed.py`).

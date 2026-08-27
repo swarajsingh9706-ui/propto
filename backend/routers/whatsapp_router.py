@@ -38,20 +38,26 @@ async def receive_webhook(request: Request):
     signature = request.headers.get("X-Hub-Signature-256", "")
     if not wa.verify_signature(body, signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
-    payload = await request.json()
-    messages = wa.parse_meta_inbound(payload)
-    for m in messages:
-        phone_id = m.get("phone_number_id")
-        society = await db.societies.find_one({"whatsapp_group.phone_number_id": phone_id}) if phone_id else None
-        if not society:
-            society = await db.societies.find_one({"monitoring": True})
-        if not society:
-            continue
-        sid = str(society["_id"])
-        if m.get("button_id"):
-            await _handle_button(sid, m["from"], m["button_id"])
-        elif m.get("text"):
-            await pipeline.process_message(sid, m["from"], m["text"])
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": "ok"}
+    try:
+        messages = wa.parse_meta_inbound(payload)
+        for m in messages:
+            phone_id = m.get("phone_number_id")
+            society = await db.societies.find_one({"whatsapp_group.phone_number_id": phone_id}) if phone_id else None
+            if not society:
+                society = await db.societies.find_one({"monitoring": True})
+            if not society:
+                continue
+            sid = str(society["_id"])
+            if m.get("button_id"):
+                await _handle_button(sid, m["from"], m["button_id"])
+            elif m.get("text"):
+                await pipeline.process_message(sid, m["from"], m["text"])
+    except Exception as e:
+        logger.exception("Meta webhook processing failed: %s", e)
     return {"status": "ok"}
 
 
@@ -207,33 +213,40 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
 # -------- Whapi Webhook (public) — reads real WhatsApp GROUP chats --------
 @router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
 async def whapi_webhook(request: Request):
-    payload = await request.json()
-    logger.info("Whapi RAW [%s]: %s", request.method, json.dumps(payload)[:2500])
-    messages = wa.parse_whapi_inbound(payload)
-    logger.info("Whapi parsed %d msg(s): %s", len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
-    for m in messages:
-        if m.get("type") == "poll" or m.get("poll"):
-            await _apply_poll_results(m)
-            continue
-        group_chat_id = m.get("group_chat_id")
-        society = None
-        if group_chat_id:
-            society = await db.societies.find_one({"whatsapp_group.chat_id": group_chat_id})
+    # Webhooks must always return 200 quickly; never surface a 500 to the provider.
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": "ok"}
+    try:
+        logger.info("Whapi RAW [%s]: %s", request.method, json.dumps(payload)[:2500])
+        messages = wa.parse_whapi_inbound(payload)
+        logger.info("Whapi parsed %d msg(s): %s", len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
+        for m in messages:
+            if m.get("type") == "poll" or m.get("poll"):
+                await _apply_poll_results(m)
+                continue
+            group_chat_id = m.get("group_chat_id")
+            society = None
+            if group_chat_id:
+                society = await db.societies.find_one({"whatsapp_group.chat_id": group_chat_id})
+                if not society:
+                    continue  # message from an unmapped group -> ignore
+            else:
+                society = await db.societies.find_one({"monitoring": True})
             if not society:
-                continue  # message from an unmapped group -> ignore
-        else:
-            society = await db.societies.find_one({"monitoring": True})
-        if not society:
-            continue
-        sid = str(society["_id"])
-        if m.get("button_id"):
-            await _handle_button(sid, m["from"], m["button_id"])
-        elif group_chat_id and m.get("text"):
-            # group message -> AI complaint pipeline; replies go back into the group, quoting the original
-            await pipeline.process_message(sid, m["from"], m["text"], group_chat_id=group_chat_id, reply_to=m.get("id"))
-        elif m.get("text"):
-            # 1:1 reply (vendor/resident) -> lightweight keyword handling
-            await _handle_direct_reply(sid, m["from"], m["text"])
+                continue
+            sid = str(society["_id"])
+            if m.get("button_id"):
+                await _handle_button(sid, m["from"], m["button_id"])
+            elif group_chat_id and m.get("text"):
+                # group message -> AI complaint pipeline; replies go back into the group, quoting the original
+                await pipeline.process_message(sid, m["from"], m["text"], group_chat_id=group_chat_id, reply_to=m.get("id"))
+            elif m.get("text"):
+                # 1:1 reply (vendor/resident) -> lightweight keyword handling
+                await _handle_direct_reply(sid, m["from"], m["text"])
+    except Exception as e:
+        logger.exception("Whapi webhook processing failed: %s", e)
     return {"status": "ok"}
 
 

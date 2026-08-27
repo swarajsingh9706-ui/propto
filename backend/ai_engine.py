@@ -2,7 +2,10 @@ import os
 import json
 import re
 import asyncio
+import logging
 from db import COMPLAINT_CATEGORIES
+
+logger = logging.getLogger("propto.ai")
 
 GREETING_WORDS = [
     "good morning", "good evening", "good night", "gm", "gn", "hi", "hello", "hey",
@@ -85,18 +88,30 @@ def _extract_unit(text: str):
 
 
 async def _call_llm(text: str) -> str:
-    """Use the user's own Gemini key when self-hosting; else the Emergent LLM key."""
+    """Use the user's own Gemini key when self-hosting; else the Emergent LLM key.
+    Degrades gracefully (returns "") if no LLM is configured or a call fails."""
     gkey = os.environ.get("GEMINI_API_KEY")
     if gkey:
-        return await asyncio.to_thread(_gemini_native, text, gkey)
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    chat = LlmChat(
-        api_key=os.environ["EMERGENT_LLM_KEY"],
-        session_id="propto-ai",
-        system_message=SYSTEM_PROMPT,
-    ).with_model("gemini", "gemini-2.5-flash")
-    resp = await chat.send_message(UserMessage(text=f"Message: {text}"))
-    return resp if isinstance(resp, str) else str(resp)
+        try:
+            return await asyncio.to_thread(_gemini_native, text, gkey)
+        except Exception as e:
+            logger.warning("Gemini call failed: %s", e)
+            return ""
+    if os.environ.get("EMERGENT_LLM_KEY"):
+        try:
+            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            chat = LlmChat(
+                api_key=os.environ["EMERGENT_LLM_KEY"],
+                session_id="propto-ai",
+                system_message=SYSTEM_PROMPT,
+            ).with_model("gemini", "gemini-2.5-flash")
+            resp = await chat.send_message(UserMessage(text=f"Message: {text}"))
+            return resp if isinstance(resp, str) else str(resp)
+        except Exception as e:
+            logger.warning("Emergent LLM call failed: %s", e)
+            return ""
+    logger.warning("No LLM configured (set GEMINI_API_KEY) — skipping AI classification")
+    return ""
 
 
 def _gemini_native(text: str, key: str) -> str:
