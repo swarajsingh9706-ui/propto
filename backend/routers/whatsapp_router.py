@@ -211,6 +211,13 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
 
 
 # -------- Whapi Webhook (public) — reads real WhatsApp GROUP chats --------
+# -------- Whapi Webhook (public) --------
+@router.get("/api/whapi/webhook")
+async def whapi_webhook_check():
+    # Lets you confirm the route is live by opening the URL in a browser.
+    return {"status": "ok", "detail": "PROPTO Whapi webhook is live. Whapi will POST here."}
+
+
 @router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
 async def whapi_webhook(request: Request):
     # Webhooks must always return 200 quickly; never surface a 500 to the provider.
