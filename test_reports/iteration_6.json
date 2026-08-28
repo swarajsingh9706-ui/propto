@@ -1,0 +1,45 @@
+{
+  "summary": "Backend-only verification (iteration 6) of the cPanel/self-host defensive changes: passenger_wsgi a2wsgi guard, guarded startup() seeding, and the new GET handler on /api/whapi/webhook. 37 tests executed: 14 new tests in /app/backend/tests/test_selfhost_regression.py (health, a2wsgi installed, passenger_wsgi imports and exposes an ASGIMiddleware-wrapped `application`, simulated missing-a2wsgi venv produces the actionable FATAL stderr hint + ImportError, webhook GET/POST(4 body variants)/PUT contract, society+super admin login and dashboards, unauthenticated dashboard 401, Excel-taxonomy simulate) - all 14 PASS; 23 existing tests in test_whapi_webhook.py (11 webhook robustness, 4 Meta webhook, 5 pipeline regression, mapped-group e2e webhook->ticket) - all 23 PASS; 7 auth-playbook tests - 5 PASS, 2 pre-existing failures (CORS wildcard with credentials, no brute-force lockout). No regressions from the startup try/except guard or passenger_wsgi changes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS (server.py)", "issue": "Unchanged from iteration 5: allow_credentials=True with Access-Control-Allow-Origin '*' (CORS_ORIGINS='*'). Browsers reject credentialed cross-origin requests with a wildcard, so the httpOnly access_token cookie set at login is unusable cross-origin (app works only via the Bearer token). Set explicit origins."},
+      {"endpoint": "POST /api/auth/login", "issue": "Unchanged from iteration 5: no brute-force lockout / rate limiting - 7 consecutive failed logins all returned 401 (playbook expects 423/429 after 5)."},
+      {"endpoint": "POST /api/webhook (Meta)", "issue": "Still unguarded (unchanged from iteration 5): verify_signature() returns True when WHATSAPP_APP_SECRET is unset (self-host default) and then `await request.json()` runs without try/except, so an empty/malformed Meta ping could 500 on a self-host. Mirror the whapi_webhook always-return-200 pattern. Not reproducible in preview because WHATSAPP_APP_SECRET is set (probes get 401)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_selfhost_regression.py",
+    "/app/backend/tests/test_whapi_webhook.py",
+    "/app/backend/tests/test_auth_playbook.py",
+    "/app/backend/tests/_cleanup_iter6.py",
+    "/app/test_reports/pytest/iter6_selfhost.xml",
+    "/app/test_reports/pytest/iter6_whapi.xml"
+  ],
+  "action_items": [
+    "Ship a2wsgi in the cPanel requirements the user installs (verified present here; passenger_wsgi raises ImportError with the correct actionable stderr hint when it is absent - the fix behaves exactly as designed).",
+    "Optional/carry-over: harden Meta POST /api/webhook the same way as whapi_webhook.",
+    "Optional/carry-over: set explicit CORS_ORIGINS (no '*') given allow_credentials=True, and add login lockout after 5 failures."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/whapi/webhook now returns 200 {status: ok, detail: 'PROPTO Whapi webhook is live...'} - verified over the public URL; this is exactly what the user needs to self-diagnose.",
+    "POST/PUT/PATCH /api/whapi/webhook returned 200 {status: ok} for every variant tested (empty body, no content-type, malformed text, form-encoded, {}, JSON array, null, realistic group message from an unmapped group, DM, poll PUT, PATCH, button reply for a non-existent ticket). Outbound Whapi send failures (400 seen in logs for the fake e2e group) are swallowed and do not affect the 200.",
+    "startup() seeding guard verified: app starts and serves; seeded super_admin/society_admin/demo data still present (logins + dashboards return real stats), so the try/except did not silently skip seeding.",
+    "passenger_wsgi.py verified importable in a subprocess: `application` is an a2wsgi ASGIMiddleware instance wrapping server.app. Simulated missing-a2wsgi import shows the FATAL 'pip install a2wsgi' message on stderr then re-raises ImportError - correct Passenger diagnostics.",
+    "No raw Mongo '_id' keys leak in /api/society/dashboard or /api/super/dashboard (recursively checked).",
+    "Historical 500s for /api/society/whatsapp/simulate exist in backend logs but are dated 2026-08-08 (pre-fix, WHAPI 402 Payment Required bubbling out); no 500 occurred during this run."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_selfhost_regression.py",
+    "/app/backend/tests/test_whapi_webhook.py",
+    "/app/backend/tests/_cleanup_iter6.py"
+  ],
+  "success_rate": {"backend": "95% (35/37; the 2 failures are the pre-existing CORS-wildcard and missing-lockout auth-hardening assertions, not regressions)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "5 tickets created during the run (TKT-260828-69BA3, 9D28D, 58ED3, DC96F, 81FFC) were deleted from MongoDB via /app/backend/tests/_cleanup_iter6.py; recent review_queue entries cleared. Green Valley WhatsApp group mapping verified restored to GV-GROUP-001 after the e2e test.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@greenvalley.com / Admin@123 (society_admin) and superadmin@propto.com / Propto@123 (super_admin) - both verified working; bcrypt hashes are $2b$; login sets httpOnly access_token cookie.",
+  "context_for_next_testing_agent": "Run pytest with -n 0 for these suites (the pipeline dedupes identical category+flat complaints, so parallel runs turn status='ticket_created' into 'duplicate'). test_selfhost_regression.py covers health/passenger_wsgi/webhook contract/dashboards/simulate; test_whapi_webhook.py covers webhook robustness + e2e. Beware: assert '_id' not in str(payload) gives false positives because of 'society_id'/'resident_id' - use the recursive _assert_no_objectid_leak helper. There is no DELETE ticket endpoint; use tests/_cleanup_iter6.py (loads /app/backend/.env then talks to Mongo directly). Whapi outbound sends really hit gate.whapi.cloud in this env.",
+  "rca_of_the_issue": "The user's HTTP 500 on https://api.propto.app/api/whapi/webhook is environment-specific on their cPanel host, not a code defect: on the Emergent preview backend GET returns 200 with the 'webhook is live' body and every POST/PUT/PATCH payload variant returns 200 {status: ok}. The two defensive changes are correct and verified: (1) passenger_wsgi.py emits a clear 'pip install a2wsgi' FATAL message and re-raises ImportError when a2wsgi is missing (reproduced by blocking the import in a subprocess) - a missing a2wsgi in their venv makes Passenger fail every request with 500; (2) startup() seeding is wrapped in try/except so an Atlas timeout under Passenger can no longer prevent request serving, and seeding still succeeds normally here (logins/dashboards intact). Remaining self-host risk: the Meta POST /api/webhook path is still unguarded when WHATSAPP_APP_SECRET is unset."
+}

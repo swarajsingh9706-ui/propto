@@ -168,15 +168,20 @@ async def write_credentials():
 
 @app.on_event("startup")
 async def startup():
-    await db.users.create_index("email", unique=True)
-    await db.tickets.create_index("society_id")
-    await db.vendors.create_index("society_id")
-    await db.residents.create_index("society_id")
-    await db.audit_logs.create_index("society_id")
-    await seed_super_admin()
-    await seed_demo()
-    await seed_suggestions()
-    await write_credentials()
+    # Guarded so a slow/failing DB seed (e.g. Atlas latency under Passenger) can't
+    # take down request serving. Seeding is idempotent and can also be run via seed.py.
+    try:
+        await db.users.create_index("email", unique=True)
+        await db.tickets.create_index("society_id")
+        await db.vendors.create_index("society_id")
+        await db.residents.create_index("society_id")
+        await db.audit_logs.create_index("society_id")
+        await seed_super_admin()
+        await seed_demo()
+        await seed_suggestions()
+        await write_credentials()
+    except Exception as e:
+        logger.exception("startup seeding failed (app will still serve): %s", e)
 
 
 @app.on_event("shutdown")

@@ -118,9 +118,12 @@ class TestWhapiWebhook:
         assert r.status_code == 200, r.text[:500]
 
     def test_get_method_behaviour(self, session):
-        """Whapi/browser probes may issue GET. Document actual behaviour (should not be 500)."""
+        """Browser/Whapi probe: GET must return 200 with a 'webhook is live' JSON body."""
         r = session.get(WHAPI, timeout=60)
-        assert r.status_code != 500, r.text[:500]
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert data.get("status") == "ok", data
+        assert "live" in (data.get("detail") or "").lower(), data
 
     def test_button_payload_unknown_ticket(self, session):
         payload = {
