@@ -1,0 +1,42 @@
+{
+  "summary": "Backend-only verification (iteration 7) of the fire-and-forget startup fix (asyncio.create_task(_seed_all())) that was made to stop the a2wsgi/Passenger request hang. 49 tests run: NEW /app/backend/tests/test_startup_nonblocking.py (5 tests) restarts the backend via supervisor and measures first-request latency - health 0.106s, GET /api/whapi/webhook 0.108s, POST /api/whapi/webhook 0.103s, and confirms the backgrounded seeding still completed (admin login + /api/society/dashboard returns real stats: 11 tickets, 5 vendors, 6 residents) with no 'startup seeding failed' in backend.err.log - all 5 PASS. Existing suites re-run with -n 0: test_selfhost_regression.py (14) and test_whapi_webhook.py (23) - all 37 PASS (webhook GET returns 200 {status:ok, detail:'PROPTO Whapi webhook is live...'}; POST/PUT/PATCH return 200 for empty/no-content-type/malformed/form-encoded/{}/array/null/realistic group/DM/poll/button payloads; simulate 'Booster pump not working' -> ticket_created, source_of_truth=excel, category=Water Supply, intent=Complaint; mapped-group e2e webhook -> Pest Control ticket; super admin login + /api/super/dashboard OK). test_auth_playbook.py: 5 PASS, 2 pre-existing failures (CORS wildcard with credentials, no brute-force lockout). No regression from backgrounding startup.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "server.py startup()", "issue": "asyncio.create_task(_seed_all()) result is not stored anywhere - per CPython docs an un-referenced task can be garbage-collected mid-run, so seeding could silently be cancelled. Keep a module/app-state reference (e.g. app.state._seed_task = asyncio.create_task(...)). Not reproduced in preview (seeding completed on every restart), but it is a real risk on slow Atlas where the task lives longer."},
+      {"endpoint": "CORS (server.py)", "issue": "Unchanged from iterations 5-6: allow_credentials=True together with Access-Control-Allow-Origin '*' (CORS_ORIGINS='*'); browsers reject credentialed cross-origin requests with a wildcard, so the httpOnly access_token cookie is unusable cross-origin. Set explicit origins."},
+      {"endpoint": "POST /api/auth/login", "issue": "Unchanged: no brute-force lockout / rate limiting - 7 consecutive bad logins all returned 401 (playbook expects 423/429 after 5)."},
+      {"endpoint": "POST /api/webhook (Meta)", "issue": "Unchanged carry-over: verify_signature() returns True when WHATSAPP_APP_SECRET is unset (self-host default) and then `await request.json()` runs without try/except, so an empty/malformed Meta ping could 500 on the cPanel host. Mirror the whapi always-200 pattern."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_startup_nonblocking.py",
+    "/app/backend/tests/test_selfhost_regression.py",
+    "/app/backend/tests/test_whapi_webhook.py",
+    "/app/backend/tests/test_auth_playbook.py",
+    "/app/test_reports/pytest/iter7_startup.xml",
+    "/app/test_reports/pytest/iter7_main.xml",
+    "/app/test_reports/pytest/iter7_auth.xml"
+  ],
+  "action_items": [
+    "Hold a reference to the seeding task (app.state._seed_task = asyncio.create_task(_seed_all())) so it cannot be GC-cancelled.",
+    "On a truly fresh DB under Passenger, run `python seed.py` once at deploy time instead of relying on the background task (each Passenger worker will also start its own _seed_all(); the unique email index makes it safe but noisy).",
+    "Optional carry-over: harden Meta POST /api/webhook; set explicit CORS_ORIGINS; add login lockout after 5 failures."
+  ],
+  "critical_code_review_comments": [
+    "Fix verified: startup() no longer blocks serving. Immediately after `supervisorctl restart backend`, the first /api/health, GET and POST /api/whapi/webhook all responded in ~0.1s with correct bodies - no hang, no ESOCKETTIMEDOUT-class latency.",
+    "Regression verified: seeding still completes although backgrounded - admin@greenvalley.com and superadmin@propto.com logins return tokens and both dashboards return real seeded stats after a cold restart; no 'startup seeding failed' entry in the logs.",
+    "_seed_all() is correctly wrapped in try/except and logs with logger.exception, so an Atlas failure degrades to 'no seed' rather than 'no service'.",
+    "passenger_wsgi.py wraps server.app directly with a2wsgi ASGIMiddleware and still emits the actionable 'pip install a2wsgi' FATAL hint when the module is missing (re-verified in a subprocess).",
+    "No raw Mongo '_id' leaks in dashboards or ticket lists (recursive check)."
+  ],
+  "updated_files": ["/app/backend/tests/test_startup_nonblocking.py"],
+  "success_rate": {"backend": "96% (47/49; the 2 failures are the pre-existing CORS-wildcard and missing-lockout auth-hardening assertions, not regressions)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "4 tickets created during the run (TKT-260828-A8BAF, DF482, 7886F, 9A436) deleted via /app/backend/tests/_cleanup_iter6.py; recent review_queue entries cleared; Green Valley group mapping verified restored to GV-GROUP-001.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@greenvalley.com / Admin@123 (society_admin) and superadmin@propto.com / Propto@123 (super_admin) - both verified working; bcrypt hashes are $2b$; login sets httpOnly access_token cookie.",
+  "context_for_next_testing_agent": "Run these suites with -n 0 (dedup turns ticket_created into duplicate in parallel runs). New file test_startup_nonblocking.py actually restarts the backend via sudo supervisorctl - run it last/alone. Cleanup created tickets with tests/_cleanup_iter6.py (update its date cutoff). Whapi outbound sends really hit gate.whapi.cloud. Only open backend gaps are the 4 'minor' items in this report.",
+  "rca_of_the_issue": "Original hang: under a2wsgi/Passenger the first request waits for FastAPI lifespan startup, and startup() performed blocking index creation + Atlas seeding, so a slow/unreachable Atlas made every request hang until Whapi's ESOCKETTIMEDOUT. The applied fix (asyncio.create_task(_seed_all()) + try/except inside _seed_all) removes seeding from the request-blocking path; verified in preview by cold-restarting the backend and observing ~0.1s first-request latency while seeding still completed asynchronously. Residual risk: the task reference is not retained (possible GC cancellation) and on a fresh DB the admin user does not exist until the background task finishes, so run seed.py explicitly at deploy time."
+}

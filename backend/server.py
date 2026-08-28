@@ -3,6 +3,7 @@ from pathlib import Path
 load_dotenv(Path(__file__).parent / '.env')
 
 import os
+import asyncio
 import logging
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
@@ -166,10 +167,7 @@ async def write_credentials():
         logger.warning("could not write credentials: %s", e)
 
 
-@app.on_event("startup")
-async def startup():
-    # Guarded so a slow/failing DB seed (e.g. Atlas latency under Passenger) can't
-    # take down request serving. Seeding is idempotent and can also be run via seed.py.
+async def _seed_all():
     try:
         await db.users.create_index("email", unique=True)
         await db.tickets.create_index("society_id")
@@ -182,6 +180,14 @@ async def startup():
         await write_credentials()
     except Exception as e:
         logger.exception("startup seeding failed (app will still serve): %s", e)
+
+
+@app.on_event("startup")
+async def startup():
+    # Fire-and-forget: serving must NEVER block on DB/seeding. Under a2wsgi/Passenger
+    # a blocking startup (e.g. slow Atlas) would hang every request (ESOCKETTIMEDOUT).
+    # Keep a reference so the task can't be garbage-collected mid-run.
+    app.state._seed_task = asyncio.create_task(_seed_all())
 
 
 @app.on_event("shutdown")

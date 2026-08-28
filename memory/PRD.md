@@ -45,6 +45,12 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 2. Add report export (Excel/PDF).
 3. Add resolved_at + SLA breach escalation.
 
+## Passenger/a2wsgi hang fix (ESOCKETTIMEDOUT, 2026-08 update)
+- Symptom: on cPanel every request to the webhook hung → Whapi ESOCKETTIMEDOUT. Also fixed a prior RecursionError caused by cPanel's default self-loading `passenger_wsgi.py` stub (must use our direct-import a2wsgi version, no `imp.load_source`).
+- Root cause: under a2wsgi the request path waits for FastAPI lifespan startup, and `startup()` did blocking index-creation + Atlas seeding → hang when Atlas is slow under Passenger.
+- Fix: `server.py` startup is now fire-and-forget (`app.state._seed_task = asyncio.create_task(_seed_all())`), `_seed_all()` guarded with try/except. Serving never blocks on seeding. On a fresh DB, run `python seed.py` once at deploy.
+- Verified by testing_agent iteration_7.json: ~0.1s first-request latency after cold restart, seeding still completes, 47/49 tests pass (2 pre-existing auth-hardening gaps).
+
 ## Webhook 500 hardening (self-host fix, 2026-06 update)
 - Fixed Whapi webhook (`/api/whapi/webhook`) returning 500 on self-host: now wraps JSON parse + processing in try/except and ALWAYS returns 200 {status: ok} (tolerates empty/malformed Whapi test pings). Same hardening applied to Meta webhook (`/api/webhook`).
 - `ai_engine._call_llm` degrades gracefully: uses `GEMINI_API_KEY` (own Gemini) if set, else Emergent key; returns "" instead of crashing when no LLM/emergentintegrations is available (self-host without a key → message ignored, not 500).
