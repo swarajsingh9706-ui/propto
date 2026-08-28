@@ -132,7 +132,11 @@ async def seed_suggestions():
 
 
 async def write_credentials():
-    path = Path("/app/memory/test_credentials.md")
+    # Dev-only helper (used inside the Emergent workspace). Skip silently off-platform.
+    memory_dir = Path("/app/memory")
+    if not memory_dir.is_dir():
+        return
+    path = memory_dir / "test_credentials.md"
     content = f"""# Test Credentials
 
 ## Super Admin
