@@ -1,5 +1,15 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Fix (2026-06) — Group messages not reaching AI Activity
+Root cause (confirmed from user's live cPanel log): Whapi webhook fires and messages parse fine (incoming `chat_id: 120363427379658951@g.us`, "Propto - Ticket Management"), but the webhook drops them because the society's stored `whatsapp_group.chat_id` didn't match → `continue` in `whatsapp_router.whapi_webhook`. No society matched, so `process_message`/`log_activity` never ran (nothing on AI Activity).
+Fix shipped:
+- `whatsapp_client.list_groups()` + `GET /api/society/whatsapp/groups` — live list of the linked number's Whapi groups (id + name; normalizes `@g.us`).
+- `WhatsApp.jsx` — group **picker dropdown** (Load/Refresh) that auto-fills the exact Chat ID, plus a **"Change group"** button so a connected group can be corrected. Manual Chat ID input retained as fallback.
+- Verified e2e in preview (picker loads real groups via user's Whapi token; selecting fills exact id) and endpoint via curl.
+- NOTE: monitoring flag is NOT required for group ingestion — only `whatsapp_group.chat_id` match. Non-complaint texts ("Hi") log as "ignored" (still visible in AI Activity); send a real complaint to get a ticket.
+- USER ACTION: redeploy backend (`whatsapp_client.py`, `routers/whatsapp_router.py`) + rebuild/upload frontend, then WhatsApp Integration → Change group → pick "Propto - Ticket Management" → Save.
+
+
 ## Deployment Update (2026-06) — Single-domain cPanel (`manage.propto.app`)
 User reset their server (kept MongoDB Atlas) for a fresh single-domain install: React + FastAPI both on `manage.propto.app`.
 - FastAPI Python App mounted at sub-path `/api`. `passenger_wsgi.py` folds `SCRIPT_NAME` back into `PATH_INFO` (verified via `backend/tests/subpath_probe.py`) because Starlette 0.37.2 strips root_path during routing and would 404 `/api/*`.

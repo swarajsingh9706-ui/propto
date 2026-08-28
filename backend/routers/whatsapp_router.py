@@ -329,6 +329,15 @@ async def wa_check(user: dict = Depends(require_society_admin)):
     return await wa.check_connection()
 
 
+@router.get("/api/society/whatsapp/groups")
+async def wa_groups(user: dict = Depends(require_society_admin)):
+    """Live list of the linked Whapi number's groups (id + name) for the picker."""
+    try:
+        return {"groups": await wa.list_groups()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not load groups: {e}")
+
+
 @router.post("/api/society/whatsapp/test-send")
 async def wa_test_send(body: TestSend, user: dict = Depends(require_society_admin)):
     if not wa.is_configured():

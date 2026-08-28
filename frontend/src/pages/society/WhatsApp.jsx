@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, MessageSquare, Send, Wifi, WifiOff, CheckCircle2, XCircle, Bot } from "lucide-react";
+import { Loader2, MessageSquare, Send, Wifi, WifiOff, CheckCircle2, XCircle, Bot, RefreshCw } from "lucide-react";
 
 const WHAPI_WEBHOOK = `${process.env.REACT_APP_BACKEND_URL}/api/whapi/webhook`;
 
@@ -33,6 +34,9 @@ export default function WhatsApp({ societyId = null, embedded = false }) {
   const [feed, setFeed] = useState([]);
   const [groupName, setGroupName] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [groups, setGroups] = useState(null);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [conn, setConn] = useState(null);
   const [testPhone, setTestPhone] = useState("");
   const [testing, setTesting] = useState(false);
@@ -62,9 +66,26 @@ export default function WhatsApp({ societyId = null, embedded = false }) {
     finally { setSending(false); }
   };
 
+  const loadGroups = async () => {
+    setLoadingGroups(true);
+    try { const { data } = await api.get("/society/whatsapp/groups", cfg); setGroups(data.groups || []); if (!data.groups?.length) toast.info("No groups found for the linked number"); }
+    catch (e) { toast.error(apiError(e)); setGroups([]); }
+    finally { setLoadingGroups(false); }
+  };
+  const pickGroup = (id) => {
+    setGroupId(id);
+    const g = (groups || []).find((x) => x.id === id);
+    if (g) setGroupName(g.name);
+  };
   const connect = async () => {
-    try { await api.post("/society/whatsapp/connect", { group_name: groupName, group_id: groupId }, cfg); toast.success("Group connected"); reload(); }
+    try { await api.post("/society/whatsapp/connect", { group_name: groupName, group_id: groupId }, cfg); toast.success("Group connected"); setEditing(false); reload(); }
     catch (e) { toast.error(apiError(e)); }
+  };
+  const startEdit = () => {
+    setGroupName(status?.group?.group_name || "");
+    setGroupId(status?.group?.group_id || "");
+    setEditing(true);
+    loadGroups();
   };
   const toggleMon = async () => { try { await api.post("/society/whatsapp/toggle-monitoring", {}, cfg); reload(); } catch (e) { toast.error(apiError(e)); } };
 
@@ -82,7 +103,7 @@ export default function WhatsApp({ societyId = null, embedded = false }) {
                   {status.connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}{status.connected ? "Connected" : "Not connected"}
                 </span>
               </div>
-              {status.connected ? (
+              {status.connected && !editing ? (
                 <div className="space-y-3">
                   <div className="rounded-md bg-secondary p-3 text-sm">
                     <p className="font-medium">{status.group?.group_name}</p>
@@ -92,13 +113,36 @@ export default function WhatsApp({ societyId = null, embedded = false }) {
                     <span>Monitoring active</span>
                     <Switch data-testid="toggle-monitoring" checked={status.monitoring} onCheckedChange={toggleMon} />
                   </label>
+                  <Button data-testid="change-group-btn" variant="outline" size="sm" onClick={startEdit} className="w-full">Change group</Button>
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {status.whapi_configured && (
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Pick your WhatsApp group</Label>
+                        <button type="button" data-testid="load-groups-btn" onClick={loadGroups} className="flex items-center gap-1 text-[11px] text-brand hover:underline">
+                          <RefreshCw className={`h-3 w-3 ${loadingGroups ? "animate-spin" : ""}`} />{groups ? "Refresh" : "Load groups"}
+                        </button>
+                      </div>
+                      {groups && groups.length > 0 && (
+                        <Select value={groupId} onValueChange={pickGroup}>
+                          <SelectTrigger data-testid="group-select" className="mt-1"><SelectValue placeholder="Select a group" /></SelectTrigger>
+                          <SelectContent>
+                            {groups.map((g) => <SelectItem key={g.id} value={g.id} data-testid={`group-opt-${g.id}`}>{g.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {groups && groups.length === 0 && <p className="mt-1 text-[11px] text-amber-600">No groups found — make sure the linked number is a member of the group, then Refresh. You can also enter the Chat ID manually below.</p>}
+                      <p className="mt-1 text-[10px] text-zinc-400">Selecting a group fills the exact Chat ID automatically.</p>
+                    </div>
+                  )}
                   <div><Label className="text-xs">Group Name</Label><Input data-testid="group-name-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="mt-1" /></div>
                   <div><Label className="text-xs">Group Chat ID {status.whapi_configured && <span className="text-zinc-400">(Whapi, ends in @g.us)</span>}</Label><Input data-testid="group-id-input" value={groupId} onChange={(e) => setGroupId(e.target.value)} placeholder="120363xxxxxxxxx@g.us" className="mt-1 font-mono text-xs" /></div>
-                  <Button data-testid="connect-group-btn" onClick={connect} disabled={!groupName || !groupId} className="w-full">Connect Group</Button>
-                  {status.whapi_configured && <p className="text-[10px] text-zinc-400">Get the chat ID from Whapi → GET /groups, or it auto-matches the first monitored group.</p>}
+                  <div className="flex gap-2">
+                    <Button data-testid="connect-group-btn" onClick={connect} disabled={!groupName || !groupId} className="flex-1">{status.connected ? "Save group" : "Connect Group"}</Button>
+                    {editing && <Button data-testid="cancel-edit-btn" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+                  </div>
                 </div>
               )}
             </div>

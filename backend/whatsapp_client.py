@@ -157,6 +157,31 @@ async def check_connection() -> dict:
     return {"ok": False, "detail": "No WhatsApp transport configured"}
 
 
+async def list_groups() -> list:
+    """List the linked Whapi number's WhatsApp groups so the admin can pick the
+    exact group (guarantees the stored chat_id matches inbound webhooks)."""
+    if not whapi_configured():
+        return []
+    headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}"}
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(f"{whapi_base()}/groups", headers=headers, params={"count": 200})
+        r.raise_for_status()
+        data = r.json()
+    raw = data.get("groups") or data.get("data") or (data if isinstance(data, list) else [])
+    out = []
+    for g in raw:
+        if not isinstance(g, dict):
+            continue
+        gid = g.get("id") or g.get("chat_id") or g.get("group_id")
+        if not gid:
+            continue
+        if "@" not in gid:
+            gid = f"{gid}@g.us"
+        name = g.get("name") or g.get("subject") or g.get("title") or gid
+        out.append({"id": gid, "name": name})
+    return out
+
+
 # ---------------- Inbound parsers ----------------
 def parse_meta_inbound(payload: dict):
     out = []
