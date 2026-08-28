@@ -1,5 +1,17 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Fix (2026-06) — Poll votes not tallying + AI Activity diagnostics
+Confirmed exact Whapi poll payloads from official docs:
+- `messages.patch` mode → `messages_updates[].after_update.poll.results[{name,count,voters}]` (our parser already handled this; verified: yes=2/no=1).
+- `messages.post` → a vote arrives as `type:"action"`, `action:{type:"vote", target:<pollMsgId>}`, usually `from_me:true` — our parser was SKIPPING it (from_me filter ran before action handling). ROOT CAUSE of votes not updating when only messages.post is enabled.
+Shipped:
+- `parse_whapi_inbound`: detect vote actions BEFORE the from_me filter; emit a poll item with `poll_fetch_id`.
+- `whatsapp_client.get_poll_results(msg_id)` → GET `/messages/{id}` to fetch authoritative poll state; router fetches + applies on a vote action. Polls now self-heal even without messages.patch.
+- Whapi webhook now logs group→society mapping: on match `"Whapi: group <chat_id> matched society <id> (<name>)"`; on miss `"NO society mapped to group chat_id=<x> -> DROPPED. Configured societies/chat_ids=[...]"` — decisive for the "no AI Activity" report.
+Note (AI Activity): since the suggestion POLL posted to the group, the society's stored `chat_id` is correct, so inbound group text should match the same society. Remaining likely causes: messages sent BEFORE connecting (Whapi doesn't replay), non-complaint text (logs as "ignored"), or viewing AI Activity under a different society/account than the group is bound to. New log line confirms which.
+USER ACTION: redeploy backend (`whatsapp_client.py`, `routers/whatsapp_router.py`) + restart; enable Whapi `messages.patch` (recommended); send a fresh complaint + a fresh vote; check the new log line.
+
+
 ## Fix (2026-06) — Group messages not reaching AI Activity
 Root cause (confirmed from user's live cPanel log): Whapi webhook fires and messages parse fine (incoming `chat_id: 120363427379658951@g.us`, "Propto - Ticket Management"), but the webhook drops them because the society's stored `whatsapp_group.chat_id` didn't match → `continue` in `whatsapp_router.whapi_webhook`. No society matched, so `process_message`/`log_activity` never ran (nothing on AI Activity).
 Fix shipped:

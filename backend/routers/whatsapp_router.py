@@ -231,6 +231,11 @@ async def whapi_webhook(request: Request):
         logger.info("Whapi parsed %d msg(s): %s", len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
         for m in messages:
             if m.get("type") == "poll" or m.get("poll"):
+                if m.get("poll_fetch_id") and not (m.get("poll") or {}).get("results"):
+                    fetched = await wa.get_poll_results(m["poll_fetch_id"])
+                    if fetched:
+                        m["poll"] = fetched
+                        m["id"] = m.get("poll_fetch_id")
                 await _apply_poll_results(m)
                 continue
             group_chat_id = m.get("group_chat_id")
@@ -238,7 +243,12 @@ async def whapi_webhook(request: Request):
             if group_chat_id:
                 society = await db.societies.find_one({"whatsapp_group.chat_id": group_chat_id})
                 if not society:
+                    configured = [(s.get("name"), (s.get("whatsapp_group") or {}).get("chat_id"))
+                                  for s in await db.societies.find({}, {"name": 1, "whatsapp_group.chat_id": 1}).to_list(50)]
+                    logger.warning("Whapi: NO society mapped to group chat_id=%s -> message DROPPED. Configured societies/chat_ids=%s",
+                                   group_chat_id, configured)
                     continue  # message from an unmapped group -> ignore
+                logger.info("Whapi: group %s matched society %s (%s)", group_chat_id, str(society["_id"]), society.get("name"))
             else:
                 society = await db.societies.find_one({"monitoring": True})
             if not society:

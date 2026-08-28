@@ -182,6 +182,24 @@ async def list_groups() -> list:
     return out
 
 
+async def get_poll_results(message_id: str) -> dict:
+    """Fetch the authoritative poll state (title + results with counts) for a poll
+    message id. Used to tally votes even when only messages.post is enabled."""
+    if not whapi_configured() or not message_id:
+        return {}
+    headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}"}
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.get(f"{whapi_base()}/messages/{message_id}", headers=headers)
+            r.raise_for_status()
+            data = r.json()
+        msg = data.get("message") or data
+        return msg.get("poll") or {}
+    except Exception as e:
+        logger.warning("get_poll_results failed for %s: %s", message_id, e)
+        return {}
+
+
 # ---------------- Inbound parsers ----------------
 def parse_meta_inbound(payload: dict):
     out = []
@@ -240,10 +258,18 @@ def parse_whapi_inbound(payload: dict):
                 "button_id": None,
                 "from_me": bool(msg.get("from_me")),
             }
-            if mtype in ("poll", "poll_update") or msg.get("poll") or msg.get("poll_update"):
-                base["poll"] = msg.get("poll") or {}
-                base["poll_update"] = msg.get("poll_update") or {}
+            act0 = msg.get("action") or {}
+            is_vote = mtype == "action" and act0.get("type") == "vote"
+            if mtype in ("poll", "poll_update") or msg.get("poll") or msg.get("poll_update") or is_vote:
                 base["type"] = "poll"
+                if is_vote:
+                    # messages.post vote: no counts here — fetch authoritative poll state.
+                    base["poll"] = {}
+                    base["poll_update"] = {}
+                    base["poll_fetch_id"] = act0.get("target") or msg.get("id")
+                else:
+                    base["poll"] = msg.get("poll") or {}
+                    base["poll_update"] = msg.get("poll_update") or {}
                 out.append(base)
                 continue
             if msg.get("from_me"):
