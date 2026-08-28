@@ -1,5 +1,16 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Deployment Update (2026-06) — Single-domain cPanel (`manage.propto.app`)
+User reset their server (kept MongoDB Atlas) for a fresh single-domain install: React + FastAPI both on `manage.propto.app`.
+- FastAPI Python App mounted at sub-path `/api`. `passenger_wsgi.py` folds `SCRIPT_NAME` back into `PATH_INFO` (verified via `backend/tests/subpath_probe.py`) because Starlette 0.37.2 strips root_path during routing and would 404 `/api/*`.
+- `frontend/public/.htaccess`: single-domain SPA fallback that excludes `/api` (lets Passenger own the backend).
+- `frontend/.env.production`: `REACT_APP_BACKEND_URL=https://manage.propto.app` (api.js appends `/api`).
+- `backend/.env.cpanel`: upload-ready env template (JWT_SECRET generated, CORS + admin + Whapi pre-filled; user pastes MONGO_URL + GEMINI_API_KEY).
+- Single clean guide: `/app/DEPLOYMENT.md`. Removed old `DEPLOYMENT_SUBDOMAIN.md`, `DEPLOYMENT_CPANEL.md`, `frontend/server.js`, and the `express` dependency.
+- Only Whapi used (no Meta). Demo seed (Green Valley) retained.
+- STATUS: package ready; USER must upload, set env, `pip install -r requirements-cpanel.txt`, `python seed.py`, Restart, then verify `/api/health` and build/upload frontend.
+
+
 ## Original Problem Statement
 AI-powered Society Complaint Management SaaS. Residents raise maintenance complaints via WhatsApp society groups. Google Gemini AI detects complaints, extracts info (category, flat, tower, priority, preferred time), auto-creates maintenance tickets, assigns vendors, and manages the lifecycle over WhatsApp. Super Admin + Society Admin dashboards. Multi-society SaaS.
 
