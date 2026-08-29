@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from fastapi.responses import PlainTextResponse
 from bson import ObjectId
 import os
+import asyncio
 import logging
 import json
 
@@ -14,6 +15,18 @@ import audit
 
 router = APIRouter(tags=["whatsapp"])
 logger = logging.getLogger("propto.whatsapp_router")
+
+# Webhook handlers MUST return 200 instantly. Heavy work (AI, ticket creation,
+# outbound WhatsApp sends) runs as an independent task on the persistent event
+# loop so it never pins a Passenger/LSAPI worker (which caused pool exhaustion).
+_bg_tasks = set()
+
+
+def _spawn(coro):
+    task = asyncio.ensure_future(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
 
 
 def _sid(user):
@@ -42,6 +55,11 @@ async def receive_webhook(request: Request):
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
+    _spawn(_process_meta(payload))
+    return {"status": "ok"}
+
+
+async def _process_meta(payload: dict):
     try:
         messages = wa.parse_meta_inbound(payload)
         for m in messages:
@@ -58,7 +76,6 @@ async def receive_webhook(request: Request):
                 await pipeline.process_message(sid, m["from"], m["text"])
     except Exception as e:
         logger.exception("Meta webhook processing failed: %s", e)
-    return {"status": "ok"}
 
 
 async def _ack(phone: str, text: str):
@@ -220,13 +237,18 @@ async def whapi_webhook_check():
 
 @router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
 async def whapi_webhook(request: Request):
-    # Webhooks must always return 200 quickly; never surface a 500 to the provider.
+    # Return 200 instantly; process in the background so we never pin a worker.
     try:
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
+    _spawn(_process_whapi(payload, request.method))
+    return {"status": "ok"}
+
+
+async def _process_whapi(payload: dict, method: str = "POST"):
     try:
-        logger.info("Whapi RAW [%s]: %s", request.method, json.dumps(payload)[:2500])
+        logger.info("Whapi RAW [%s]: %s", method, json.dumps(payload)[:2500])
         messages = wa.parse_whapi_inbound(payload)
         logger.info("Whapi parsed %d msg(s): %s", len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
         for m in messages:
@@ -264,7 +286,6 @@ async def whapi_webhook(request: Request):
                 await _handle_direct_reply(sid, m["from"], m["text"])
     except Exception as e:
         logger.exception("Whapi webhook processing failed: %s", e)
-    return {"status": "ok"}
 
 
 async def _handle_direct_reply(society_id: str, phone: str, text: str):

@@ -1,5 +1,12 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## CRITICAL FIX (2026-06) — cPanel LSAPI worker pool exhaustion (nothing processed)
+User's cPanel log: `Reached max children process limit: 6 ... busy: 8, please increase LSAPI_CHILDREN` + workers killed by signal 15. ROOT CAUSE: webhook handlers processed everything INLINE (AI/Gemini call ~5s + multiple 20s outbound WhatsApp sends) before returning 200, pinning each of the 6 LSAPI workers for many seconds. Whapi bursts (messages + chats_updates + poll patches) saturated the pool instantly → no group messages, poll votes, or anything got processed.
+FIX (whatsapp_router.py): both webhooks (`/api/whapi/webhook`, `/api/webhook`) now parse the JSON, spawn `_process_whapi`/`_process_meta` as an independent task via `_spawn()` (asyncio.ensure_future on the persistent loop; kept in `_bg_tasks` set so not GC'd), and return `{"status":"ok"}` immediately. The spawned task is NOT the request's asgi_task, so a2wsgi/Passenger does not cancel it — it keeps running on the loop thread after the worker is freed.
+Verified e2e through live ingress: webhook responded in 0.28s while the background task matched society, ran AI, created ticket, and logged to AI Activity.
+USER ACTION: redeploy `routers/whatsapp_router.py` (+ `whatsapp_client.py` from the poll fix) and Restart. Optionally raise LSAPI_CHILDREN in cPanel, but the code fix removes the saturation. This also unblocks the earlier "no AI Activity" and "poll votes not updating" reports (the workers were simply never free to process them).
+
+
 ## Fix (2026-06) — Poll votes not tallying + AI Activity diagnostics
 Confirmed exact Whapi poll payloads from official docs:
 - `messages.patch` mode → `messages_updates[].after_update.poll.results[{name,count,voters}]` (our parser already handled this; verified: yes=2/no=1).
