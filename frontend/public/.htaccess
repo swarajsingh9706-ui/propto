@@ -2,9 +2,6 @@ Options -MultiViews
 RewriteEngine On
 RewriteBase /
 
-# Let the Passenger Python app handle the API (mounted at /api). Never rewrite it.
-RewriteRule ^api(/.*)?$ - [L]
-
 # Serve real files and folders as-is
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

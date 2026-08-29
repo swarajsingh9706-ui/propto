@@ -1,5 +1,16 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Deployment change (2026-06) — Backend moved to its own subdomain (api.propto.app)
+User asked to switch to a dedicated backend subdomain. Frontend stays on `manage.propto.app`, backend runs as its own cPanel Python App on `api.propto.app` (isolated worker pool, no .htaccess/SPA conflict). Keeps `/api` prefix → webhook `https://api.propto.app/api/whapi/webhook`.
+Changes:
+- `frontend/.env.production` → `REACT_APP_BACKEND_URL=https://api.propto.app` (cross-origin).
+- `frontend/public/.htaccess` → pure SPA fallback (no /api passthrough needed now).
+- `backend/.env.cpanel` → `CORS_ORIGINS=https://manage.propto.app` (must be exact origin; server uses allow_credentials=True so no `*`).
+- `passenger_wsgi.py` unchanged — root-mount case verified (SCRIPT_NAME='' → `/api/health` 200).
+- `DEPLOYMENT.md` fully rewritten for the two-subdomain setup incl. AutoSSL for api subdomain, and LSAPI_CHILDREN=20 / PassengerMaxPoolSize guidance.
+NOTE: the subdomain alone does NOT fix processing — the non-blocking webhook fix (already shipped) + more workers do. Subdomain just isolates/cleans the backend.
+
+
 ## CRITICAL FIX (2026-06) — cPanel LSAPI worker pool exhaustion (nothing processed)
 User's cPanel log: `Reached max children process limit: 6 ... busy: 8, please increase LSAPI_CHILDREN` + workers killed by signal 15. ROOT CAUSE: webhook handlers processed everything INLINE (AI/Gemini call ~5s + multiple 20s outbound WhatsApp sends) before returning 200, pinning each of the 6 LSAPI workers for many seconds. Whapi bursts (messages + chats_updates + poll patches) saturated the pool instantly → no group messages, poll votes, or anything got processed.
 FIX (whatsapp_router.py): both webhooks (`/api/whapi/webhook`, `/api/webhook`) now parse the JSON, spawn `_process_whapi`/`_process_meta` as an independent task via `_spawn()` (asyncio.ensure_future on the persistent loop; kept in `_bg_tasks` set so not GC'd), and return `{"status":"ok"}` immediately. The spawned task is NOT the request's asgi_task, so a2wsgi/Passenger does not cancel it — it keeps running on the loop thread after the worker is freed.
