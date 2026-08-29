@@ -16,17 +16,10 @@ import audit
 router = APIRouter(tags=["whatsapp"])
 logger = logging.getLogger("propto.whatsapp_router")
 
-# Webhook handlers MUST return 200 instantly. Heavy work (AI, ticket creation,
-# outbound WhatsApp sends) runs as an independent task on the persistent event
-# loop so it never pins a Passenger/LSAPI worker (which caused pool exhaustion).
-_bg_tasks = set()
-
-
-def _spawn(coro):
-    task = asyncio.ensure_future(coro)
-    _bg_tasks.add(task)
-    task.add_done_callback(_bg_tasks.discard)
-    return task
+# Webhooks are processed INLINE (awaited within the request) so the DB writes
+# complete before we return 200. Passenger/LSAPI kills idle/recycled workers
+# right after the response, which would abandon any detached background task
+# before it writes to Atlas. Hard timeout caps below keep a worker from hanging.
 
 
 def _sid(user):
@@ -55,7 +48,10 @@ async def receive_webhook(request: Request):
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
-    _spawn(_process_meta(payload))
+    try:
+        await asyncio.wait_for(_process_meta(payload), timeout=45)
+    except asyncio.TimeoutError:
+        logger.warning("Meta webhook processing exceeded 45s cap; returning 200")
     return {"status": "ok"}
 
 
@@ -237,12 +233,15 @@ async def whapi_webhook_check():
 
 @router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
 async def whapi_webhook(request: Request):
-    # Return 200 instantly; process in the background so we never pin a worker.
+    # Process inline so ticket/poll writes reach Atlas before we return 200.
     try:
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
-    _spawn(_process_whapi(payload, request.method))
+    try:
+        await asyncio.wait_for(_process_whapi(payload, request.method), timeout=45)
+    except asyncio.TimeoutError:
+        logger.warning("Whapi webhook processing exceeded 45s cap; returning 200")
     return {"status": "ok"}
 
 

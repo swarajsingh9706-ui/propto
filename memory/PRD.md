@@ -1,5 +1,15 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## CRITICAL FIX v2 (2026-06) — Webhook writes never reached Atlas under Passenger
+User observation: they CAN create a poll (posts to WhatsApp + persists) but inbound messages create NO tickets, and "nothing updates in Atlas." Decisive: poll creation is written INSIDE the HTTP request (awaited) → persists; the webhook's detached background task (`_spawn`/ensure_future from the prior fix) never wrote because Passenger/LSAPI kills/recycles the worker right after the 200 is sent — killing the daemon-thread loop and the pending task before its Atlas write. Confirmed a2wsgi uses a per-middleware daemon-thread loop (asgi.py L130-134) and waits only for the request's own asgi_task (L300-303).
+FIX (reverted to inline, guaranteed-write):
+- `whatsapp_router.py`: both webhooks now `await asyncio.wait_for(_process_whapi/_process_meta(...), timeout=45)` INLINE, then return 200. Write completes before the worker can be recycled. 45s cap prevents a hung worker.
+- `ai_engine.py`: `_call_llm` wrapped in `asyncio.wait_for(..., 15s)` (both Gemini-native and Emergent paths); native `generate_content(..., request_options={"timeout":12})`. No LLM call can hang a worker.
+- `whatsapp_client.py`: outbound `_whapi_post`/`_meta_post` timeout 20s→8s. Sends happen AFTER the ticket is persisted, so a slow send never loses the ticket.
+Verified live ingress: taxonomy complaint → 200 in 2.05s with ticket written to DB before response.
+Combined with LSAPI_CHILDREN≥20, this handles real volume. USER ACTION: redeploy `routers/whatsapp_router.py`, `ai_engine.py`, `whatsapp_client.py`; Restart.
+
+
 ## Deployment change (2026-06) — Backend moved to its own subdomain (api.propto.app)
 User asked to switch to a dedicated backend subdomain. Frontend stays on `manage.propto.app`, backend runs as its own cPanel Python App on `api.propto.app` (isolated worker pool, no .htaccess/SPA conflict). Keeps `/api` prefix → webhook `https://api.propto.app/api/whapi/webhook`.
 Changes:

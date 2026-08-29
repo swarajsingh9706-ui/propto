@@ -93,9 +93,9 @@ async def _call_llm(text: str) -> str:
     gkey = os.environ.get("GEMINI_API_KEY")
     if gkey:
         try:
-            return await asyncio.to_thread(_gemini_native, text, gkey)
+            return await asyncio.wait_for(asyncio.to_thread(_gemini_native, text, gkey), timeout=15)
         except Exception as e:
-            logger.warning("Gemini call failed: %s", e)
+            logger.warning("Gemini call failed/timed out: %s", e)
             return ""
     if os.environ.get("EMERGENT_LLM_KEY"):
         try:
@@ -105,7 +105,7 @@ async def _call_llm(text: str) -> str:
                 session_id="propto-ai",
                 system_message=SYSTEM_PROMPT,
             ).with_model("gemini", "gemini-2.5-flash")
-            resp = await chat.send_message(UserMessage(text=f"Message: {text}"))
+            resp = await asyncio.wait_for(chat.send_message(UserMessage(text=f"Message: {text}")), timeout=15)
             return resp if isinstance(resp, str) else str(resp)
         except Exception as e:
             logger.warning("Emergent LLM call failed: %s", e)
@@ -118,7 +118,7 @@ def _gemini_native(text: str, key: str) -> str:
     import google.generativeai as genai
     genai.configure(api_key=key)
     model = genai.GenerativeModel("gemini-2.5-flash", system_instruction=SYSTEM_PROMPT)
-    resp = model.generate_content(f"Message: {text}")
+    resp = model.generate_content(f"Message: {text}", request_options={"timeout": 12})
     return getattr(resp, "text", "") or ""
 
 

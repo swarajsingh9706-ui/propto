@@ -47,7 +47,7 @@ def strip_jid(jid: str) -> str:
 # ---------------- Outbound (Whapi preferred, Meta fallback, else simulated) ----------------
 async def _whapi_post(path: str, payload: dict) -> dict:
     headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}", "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=20) as c:
+    async with httpx.AsyncClient(timeout=8) as c:
         r = await c.post(f"{whapi_base()}{path}", headers=headers, json=payload)
         r.raise_for_status()
         return r.json()
@@ -56,7 +56,7 @@ async def _whapi_post(path: str, payload: dict) -> dict:
 async def _meta_post(payload: dict) -> dict:
     url = f"{GRAPH_URL}/{os.environ['WHATSAPP_PHONE_ID']}/messages"
     headers = {"Authorization": f"Bearer {os.environ['WHATSAPP_TOKEN']}", "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=20) as c:
+    async with httpx.AsyncClient(timeout=8) as c:
         r = await c.post(url, headers=headers, json=payload)
         r.raise_for_status()
         return r.json()
