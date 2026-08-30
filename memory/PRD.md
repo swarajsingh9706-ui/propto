@@ -1,5 +1,14 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Taxonomy upgrade (2026-06) — 10,000-issue workbook
+Replaced the 1,000-row taxonomy with the new `Propto_10000_Issue_Taxonomy.xlsx` (sheet "Issue Taxonomy", 10,000 rows, 181 categories). New columns: Issue ID, Category, Subcategory, Issue / Problem, Severity, Target SLA, Default Owner / Vendor, Asset Impact, Deduplication Rule, Propto Action.
+- `situations_kb.py` rewritten: matches on **Issue / Problem** (specific); maps Severity→priority; derives `handled_by`/`vendor_required` from **Default Owner / Vendor** (external-vendor keywords → route to vendor, else in-house "Society Manager"); `app_category` via keyword heuristics → demo vendor enum (Plumbing/Electrical/Lift/Security/Housekeeping/Pest Control/Gardening/Parking/DG Set/Civil). Matching optimized: fuzzy ratio only for rows sharing a token (2–39ms at 10k rows).
+- Pre-built `backend/data/taxonomy.json` (10k items) so cPanel needs no runtime Excel/pandas/network; loader falls back to fetching `_XLSX` if cache missing.
+- `ai_engine.analyze_message`: `matched_situation` now = the Issue/Problem text.
+- Verified: sample complaints match with correct category/severity/routing; greetings fall through to AI.
+USER ACTION: redeploy `situations_kb.py`, `ai_engine.py`, and **`data/taxonomy.json`** (overwrites the old cache); Restart.
+
+
 ## CRITICAL FIX v2 (2026-06) — Webhook writes never reached Atlas under Passenger
 User observation: they CAN create a poll (posts to WhatsApp + persists) but inbound messages create NO tickets, and "nothing updates in Atlas." Decisive: poll creation is written INSIDE the HTTP request (awaited) → persists; the webhook's detached background task (`_spawn`/ensure_future from the prior fix) never wrote because Passenger/LSAPI kills/recycles the worker right after the 200 is sent — killing the daemon-thread loop and the pending task before its Atlas write. Confirmed a2wsgi uses a per-middleware daemon-thread loop (asgi.py L130-134) and waits only for the request's own asgi_task (L300-303).
 FIX (reverted to inline, guaranteed-write):

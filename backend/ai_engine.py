@@ -169,7 +169,7 @@ async def analyze_message(text: str) -> dict:
             "confidence": 0.9,
             "routing_category": kb.get("app_category", ""),
             "kb_category": kb["category"],
-            "matched_situation": kb.get("subcategory"),
+            "matched_situation": kb.get("issue") or kb.get("subcategory"),
             "kb_score": kb.get("score"),
             "handled_by": kb.get("handled_by", ""),
             "vendor_required": kb.get("vendor_required", ""),
