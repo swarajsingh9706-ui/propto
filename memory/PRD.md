@@ -188,3 +188,10 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - On a confident fuzzy match (threshold 0.6), the Excel category/sub-category/priority OVERRIDE the AI guess. Granular Excel category is mapped to the app's 11-category enum (`_CAT_MAP`) for vendor routing/analytics; raw Excel category kept in `kb_category`, sub-category in `sub_category`, matched text in `matched_situation`.
 - Ticket schema now persists `sub_category`, `kb_category`, `matched_situation` (stored only; not shown in UI per user choice).
 - Verified e2e via simulator: correct category/priority/sub_category + correct vendor auto-assignment. Backend-tested (agent).
+
+## Complaint-detection safety net (2026-06 bug fix)
+- BUG: clear complaints (e.g. "Building ka lift down hai", "A wing ka lift stuck hai") were logged as "AI: not a complaint" and dropped. Root cause: pipeline relied 100% on Gemini as the first gate; if Gemini said NotComplaint OR the Gemini call failed/returned empty, `_ai_classify` silently defaulted to `intent=NotComplaint` — taxonomy + keyword list never got a chance.
+- FIX (`backend/ai_engine.py`): added deterministic safety net in `analyze_message`. After Gemini classify, run 10k-taxonomy match + `strong_keyword_hit()` (new). If Gemini says NotComplaint but taxonomy matches (good score) OR a domain/complaint keyword hits, override to Complaint, set category (keyword-derived if needed), bump confidence to >=0.85 so a ticket is created. Works even when Gemini is fully down (Gemini-failure fallback).
+- Added safe Gemini health logging in `_call_llm` ("Gemini OK (N chars)" / "Gemini returned empty" / failure warning) — never logs the key. Visible in worker/API logs to diagnose VPS key issues.
+- Kept current behavior for genuine non-complaints (greetings/ads still ignored via prefilter + no keyword hit).
+- Verified: with Gemini disabled, all 3 lift msgs + "No water" -> Complaint with tickets; greetings/ads correctly ignored. E2e via simulate endpoint created ticket TKT-260906-DF5AF.

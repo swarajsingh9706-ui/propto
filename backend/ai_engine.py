@@ -33,6 +33,42 @@ COMPLAINT_KEYWORDS = [
 ]
 
 
+# Keyword -> app category groups. Used for the deterministic safety net so genuine
+# complaints are never dropped when Gemini fails or misclassifies (e.g. Hinglish).
+KEYWORD_CATEGORIES = [
+    ("Lift", ["lift", "elevator"]),
+    ("Plumbing", ["water", "leak", "leakage", "leaking", "seepage", "drain", "pipe", "tap",
+                  "flush", "overflow", "sewage", "toilet", "no water", "plumb", "choked", "blocked"]),
+    ("Electrical", ["power", "electric", "current", "light", "fan", "switch", "wiring",
+                    "socket", "mcb", "short circuit", "no power", "fuse"]),
+    ("Security", ["security", "guard", "gate", "intercom", "cctv", "theft"]),
+    ("Housekeeping", ["clean", "garbage", "trash", "dust", "sweep", "housekeep"]),
+    ("Pest Control", ["pest", "cockroach", "mosquito", "rat", "termite", "insect"]),
+    ("Gardening", ["garden", "plant", "tree", "lawn"]),
+    ("Parking", ["parking", "vehicle"]),
+    ("DG Set", ["generator", "dg set", "dg "]),
+    ("Civil", ["wall", "crack", "paint", "ceiling", "tile", "plaster", "civil"]),
+]
+
+# Generic complaint indicators that, on their own, still mean "this is a complaint".
+GENERIC_COMPLAINT_WORDS = ["broken", "not working", "repair", "fix ", "issue", "problem",
+                           "complaint", "damaged", "stuck", "down hai", "kharab", "band hai"]
+
+
+def strong_keyword_hit(text: str):
+    """Deterministic complaint signal. Returns (True, category) if the message contains a
+    domain keyword or a generic complaint indicator; else (False, '')."""
+    t = (text or "").lower()
+    for cat, words in KEYWORD_CATEGORIES:
+        for w in words:
+            if w in t:
+                return True, cat
+    for w in GENERIC_COMPLAINT_WORDS:
+        if w in t:
+            return True, ""
+    return False, ""
+
+
 def prefilter(text: str) -> dict:
     """Cheap gate BEFORE any LLM call. Drops only obvious non-complaints
     (empty/greeting/festival/ad). Everything else is forwarded to Gemini, which
@@ -96,7 +132,12 @@ async def _call_llm(text: str) -> str:
     gkey = os.environ.get("GEMINI_API_KEY")
     if gkey:
         try:
-            return await asyncio.wait_for(asyncio.to_thread(_gemini_native, text, gkey), timeout=15)
+            out = await asyncio.wait_for(asyncio.to_thread(_gemini_native, text, gkey), timeout=15)
+            if out and out.strip():
+                logger.info("Gemini OK (%d chars)", len(out))
+            else:
+                logger.warning("Gemini returned empty response")
+            return out
         except Exception as e:
             logger.warning("Gemini call failed/timed out: %s", e)
             return ""
@@ -127,6 +168,7 @@ def _gemini_native(text: str, key: str) -> str:
 
 async def _ai_classify(text: str) -> dict:
     raw = await _call_llm(text)
+    llm_ok = bool(raw and raw.strip())
     cleaned = raw.strip().replace("```json", "").replace("```", "").strip()
     m = re.search(r"\{.*\}", cleaned, re.DOTALL)
     if m:
@@ -150,21 +192,46 @@ async def _ai_classify(text: str) -> dict:
     if data.get("category") not in COMPLAINT_CATEGORIES:
         data["category"] = data.get("category") or ""
     data["source_of_truth"] = "ai"
+    data["_llm_ok"] = llm_ok
     return data
 
 
 async def analyze_message(text: str) -> dict:
     """Flow: Gemini decides complaint-or-not (+ extracts flat/priority/description),
     THEN the 10,000-row taxonomy enriches category/severity/routing if present,
-    ELSE the Gemini-generated content is used to build the ticket."""
+    ELSE the Gemini-generated content is used to build the ticket.
+
+    Safety net: if Gemini says NotComplaint OR the Gemini call failed/returned empty,
+    but the message strongly matches the 10,000-row taxonomy or a complaint keyword,
+    we override to a valid Complaint so genuine issues are never silently dropped."""
     # 1) Gemini: is this an actual complaint? (also extracts flat/tower/priority/description)
     ai = await _ai_classify(text)
+
+    # 2) Deterministic signals (independent of Gemini).
+    import situations_kb
+    kb = situations_kb.match(text)
+    kw_hit, kw_cat = strong_keyword_hit(text)
+
+    # 3) Override NotComplaint / Gemini-failure when there's a real complaint signal.
+    if ai.get("intent") != "Complaint" and (kb or kw_hit):
+        reason = "taxonomy_match" if kb else "keyword_match"
+        logger.info("Complaint override applied (%s); Gemini intent=%s llm_ok=%s",
+                    reason, ai.get("intent"), ai.get("_llm_ok"))
+        ai["intent"] = "Complaint"
+        ai["override_reason"] = reason
+        # When Gemini failed, ensure sane defaults for ticket creation.
+        if not ai.get("description"):
+            ai["description"] = text[:150]
+        if kw_cat and not ai.get("category"):
+            ai["category"] = kw_cat
+        ai["priority"] = ai.get("priority") or "Medium"
+        # Bump confidence past the ticket threshold so a ticket is actually created.
+        ai["confidence"] = max(float(ai.get("confidence", 0) or 0), 0.85)
+
     if ai.get("intent") != "Complaint":
         return ai
 
-    # 2) Complaint -> check the 10,000-issue taxonomy for authoritative routing.
-    import situations_kb
-    kb = situations_kb.match(text)
+    # 4) Complaint -> enrich from the 10,000-issue taxonomy for authoritative routing.
     if kb:
         ai["category"] = kb["category"]
         ai["sub_category"] = kb.get("sub_category", "")
@@ -178,6 +245,8 @@ async def analyze_message(text: str) -> dict:
         ai["confidence"] = max(float(ai.get("confidence", 0) or 0), 0.9)
         ai["source_of_truth"] = "excel"
     else:
-        # 3) No taxonomy match -> rely on the Gemini-generated ticket content.
+        # 5) No taxonomy match -> rely on the Gemini-generated (or keyword-derived) content.
+        if kw_cat:
+            ai["routing_category"] = ai.get("routing_category") or kw_cat
         ai["source_of_truth"] = "ai"
     return ai
