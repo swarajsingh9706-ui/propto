@@ -33,16 +33,13 @@ COMPLAINT_KEYWORDS = [
 ]
 
 
-def rule_filter(text: str) -> dict:
-    """Return {'forward': bool, 'reason': str}. Only potential complaints forwarded to AI."""
+def prefilter(text: str) -> dict:
+    """Cheap gate BEFORE any LLM call. Drops only obvious non-complaints
+    (empty/greeting/festival/ad). Everything else is forwarded to Gemini, which
+    makes the final complaint-or-not decision."""
     t = (text or "").lower().strip()
     if not t or len(t) < 4:
         return {"forward": False, "reason": "Empty/too short"}
-
-    has_complaint = any(k in t for k in COMPLAINT_KEYWORDS)
-    if has_complaint:
-        return {"forward": True, "reason": "Complaint keyword matched"}
-
     for w in AD_WORDS:
         if w in t:
             return {"forward": False, "reason": "Advertisement/Spam"}
@@ -50,9 +47,15 @@ def rule_filter(text: str) -> dict:
         if w in t:
             return {"forward": False, "reason": "Festival wish"}
     stripped = re.sub(r"[^a-z ]", "", t)
-    if stripped.strip() in GREETING_WORDS or all(word in GREETING_WORDS for word in stripped.split() if word):
+    words = [w for w in stripped.split() if w]
+    if words and all(w in GREETING_WORDS for w in words):
         return {"forward": False, "reason": "Greeting"}
-    return {"forward": False, "reason": "General discussion"}
+    return {"forward": True, "reason": "Forwarded to Gemini"}
+
+
+def rule_filter(text: str) -> dict:
+    """Deprecated keyword gate (kept for compatibility). Use prefilter()."""
+    return prefilter(text)
 
 
 SYSTEM_PROMPT = f"""You are an AI that analyzes WhatsApp messages from a residential society group to detect maintenance complaints.
@@ -151,29 +154,30 @@ async def _ai_classify(text: str) -> dict:
 
 
 async def analyze_message(text: str) -> dict:
-    # 1) Check the 1,000-row taxonomy Excel FIRST. If the issue is present, use its
-    #    category / sub-category / severity / handled-by / vendor directly.
+    """Flow: Gemini decides complaint-or-not (+ extracts flat/priority/description),
+    THEN the 10,000-row taxonomy enriches category/severity/routing if present,
+    ELSE the Gemini-generated content is used to build the ticket."""
+    # 1) Gemini: is this an actual complaint? (also extracts flat/tower/priority/description)
+    ai = await _ai_classify(text)
+    if ai.get("intent") != "Complaint":
+        return ai
+
+    # 2) Complaint -> check the 10,000-issue taxonomy for authoritative routing.
     import situations_kb
     kb = situations_kb.match(text)
     if kb:
-        flat, tower = _extract_unit(text)
-        return {
-            "intent": "Complaint",
-            "category": kb["category"],
-            "sub_category": kb.get("sub_category", ""),
-            "flat": flat,
-            "tower": tower,
-            "priority": kb["priority"],
-            "preferred_time": "",
-            "description": text[:150],
-            "confidence": 0.9,
-            "routing_category": kb.get("app_category", ""),
-            "kb_category": kb["category"],
-            "matched_situation": kb.get("issue") or kb.get("subcategory"),
-            "kb_score": kb.get("score"),
-            "handled_by": kb.get("handled_by", ""),
-            "vendor_required": kb.get("vendor_required", ""),
-            "source_of_truth": "excel",
-        }
-    # 2) Not in the taxonomy -> fall back to AI.
-    return await _ai_classify(text)
+        ai["category"] = kb["category"]
+        ai["sub_category"] = kb.get("sub_category", "")
+        ai["priority"] = kb["priority"]
+        ai["routing_category"] = kb.get("app_category", "")
+        ai["kb_category"] = kb["category"]
+        ai["matched_situation"] = kb.get("issue") or kb.get("subcategory")
+        ai["kb_score"] = kb.get("score")
+        ai["handled_by"] = kb.get("handled_by", "")
+        ai["vendor_required"] = kb.get("vendor_required", "")
+        ai["confidence"] = max(float(ai.get("confidence", 0) or 0), 0.9)
+        ai["source_of_truth"] = "excel"
+    else:
+        # 3) No taxonomy match -> rely on the Gemini-generated ticket content.
+        ai["source_of_truth"] = "ai"
+    return ai

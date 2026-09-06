@@ -199,14 +199,10 @@ async def process_message(society_id: str, phone: str, text: str, group_chat_id:
     reply_target = group_chat_id if in_group else phone
     quote = reply_to if in_group else None
 
-    rule = ai_engine.rule_filter(text)
+    rule = ai_engine.prefilter(text)
     if not rule["forward"]:
-        # Even if no keyword matched, the message may match a known Excel situation
-        # (e.g. "Medical assistance needed"). Don't ignore those.
-        import situations_kb
-        if not situations_kb.match(text):
-            await log_activity(society_id, phone, text, "ignored", reason=rule["reason"])
-            return {"status": "ignored", "reason": rule["reason"]}
+        await log_activity(society_id, phone, text, "ignored", reason=rule["reason"])
+        return {"status": "ignored", "reason": rule["reason"]}
 
     try:
         ai = await ai_engine.analyze_message(text)

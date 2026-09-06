@@ -1,5 +1,19 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Architecture change (2026-06) — Redis queue + async worker + Gemini-first classification (VPS)
+User moved to a VPS with Redis and requested a queue/worker pipeline (Redis+BullMQ pattern, implemented in Python) and a reordered classification.
+New flow: WhatsApp → Webhook → (REDIS_URL set) LPUSH to Redis + return 200 → `worker.py` (persistent) BRPOPLPUSH → pre-filter → Gemini "is this a complaint?" (+extract) → 10,000 taxonomy enrich → if no match, Gemini generates ticket content → ticket.
+Files:
+- `task_queue.py` (new): redis.asyncio LPUSH/queue helpers; `redis_enabled()` gates queue vs inline. Hardened conn (socket_timeout=None, health_check_interval).
+- `worker.py` (new): async consumer, reliable BRPOPLPUSH→process→LREM, retries on redis hiccups. Run as systemd `propto-worker`.
+- `routers/whatsapp_router.py`: `_process_*`→public `process_whapi/process_meta`; webhooks enqueue when REDIS_URL set, else inline (cPanel fallback preserved).
+- `ai_engine.py`: `prefilter()` drops greetings/spam before any LLM; `analyze_message()` reordered to Gemini-first → taxonomy enrich → Gemini content.
+- `pipeline.py`: uses `prefilter()`.
+- `.env.vps` (new): includes REDIS_URL + user's Gemini key. `requirements.txt`: added `redis`.
+- Guide: `DEPLOYMENT_VPS.md` (Redis install/secure, gunicorn+uvicorn systemd API, systemd worker, nginx+certbot, firewall, verify, ops).
+Verified e2e in preview with local Redis: complaint enqueued→worker→ticket; greeting ignored (no Gemini); webhook 200 in ~0.2s. Note: OpenAI NOT used — Gemini used for both steps per user. Preview reverted to inline (REDIS_URL removed from workspace .env).
+
+
 ## Taxonomy upgrade (2026-06) — 10,000-issue workbook
 Replaced the 1,000-row taxonomy with the new `Propto_10000_Issue_Taxonomy.xlsx` (sheet "Issue Taxonomy", 10,000 rows, 181 categories). New columns: Issue ID, Category, Subcategory, Issue / Problem, Severity, Target SLA, Default Owner / Vendor, Asset Impact, Deduplication Rule, Propto Action.
 - `situations_kb.py` rewritten: matches on **Issue / Problem** (specific); maps Severity→priority; derives `handled_by`/`vendor_required` from **Default Owner / Vendor** (external-vendor keywords → route to vendor, else in-house "Society Manager"); `app_category` via keyword heuristics → demo vendor enum (Plumbing/Electrical/Lift/Security/Housekeeping/Pest Control/Gardening/Parking/DG Set/Civil). Matching optimized: fuzzy ratio only for rows sharing a token (2–39ms at 10k rows).

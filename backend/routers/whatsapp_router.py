@@ -12,6 +12,7 @@ from auth_utils import require_society_admin, user_society_id, get_current_user
 import whatsapp_client as wa
 import pipeline
 import audit
+import task_queue
 
 router = APIRouter(tags=["whatsapp"])
 logger = logging.getLogger("propto.whatsapp_router")
@@ -48,14 +49,17 @@ async def receive_webhook(request: Request):
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
-    try:
-        await asyncio.wait_for(_process_meta(payload), timeout=45)
-    except asyncio.TimeoutError:
-        logger.warning("Meta webhook processing exceeded 45s cap; returning 200")
+    if task_queue.redis_enabled():
+        await task_queue.enqueue({"kind": "meta", "payload": payload})
+    else:
+        try:
+            await asyncio.wait_for(process_meta(payload), timeout=45)
+        except asyncio.TimeoutError:
+            logger.warning("Meta webhook processing exceeded 45s cap; returning 200")
     return {"status": "ok"}
 
 
-async def _process_meta(payload: dict):
+async def process_meta(payload: dict):
     try:
         messages = wa.parse_meta_inbound(payload)
         for m in messages:
@@ -233,19 +237,22 @@ async def whapi_webhook_check():
 
 @router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
 async def whapi_webhook(request: Request):
-    # Process inline so ticket/poll writes reach Atlas before we return 200.
+    # Return 200 fast. With Redis set -> enqueue for the worker; else process inline.
     try:
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
-    try:
-        await asyncio.wait_for(_process_whapi(payload, request.method), timeout=45)
-    except asyncio.TimeoutError:
-        logger.warning("Whapi webhook processing exceeded 45s cap; returning 200")
+    if task_queue.redis_enabled():
+        await task_queue.enqueue({"kind": "whapi", "payload": payload, "method": request.method})
+    else:
+        try:
+            await asyncio.wait_for(process_whapi(payload, request.method), timeout=45)
+        except asyncio.TimeoutError:
+            logger.warning("Whapi webhook processing exceeded 45s cap; returning 200")
     return {"status": "ok"}
 
 
-async def _process_whapi(payload: dict, method: str = "POST"):
+async def process_whapi(payload: dict, method: str = "POST"):
     try:
         logger.info("Whapi RAW [%s]: %s", method, json.dumps(payload)[:2500])
         messages = wa.parse_whapi_inbound(payload)
