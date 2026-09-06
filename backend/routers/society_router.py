@@ -181,6 +181,106 @@ async def import_residents(file: UploadFile = File(...), society_id: str = None,
 
 
 # ---------------- Tickets ----------------
+# ---------------- Assets ----------------
+@router.get("/assets")
+async def list_assets(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    return [_clean(d) for d in await db.assets.find({"society_id": sid}).sort("created_at", -1).to_list(500)]
+
+
+@router.post("/assets")
+async def create_asset(body: dict, society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    doc = {"society_id": sid, "name": (body.get("name") or "").strip(),
+           "type": (body.get("type") or "").strip(), "location": (body.get("location") or "").strip(),
+           "next_service": body.get("next_service") or "", "status": body.get("status") or "Scheduled",
+           "created_at": now_iso()}
+    if not doc["name"]:
+        raise HTTPException(status_code=400, detail="Asset name required")
+    r = await db.assets.insert_one(doc)
+    await audit.log(sid, "asset_added", f"Asset {doc['name']} ({doc['type'] or '—'}) added", actor=_actor(user), category="asset")
+    return _clean({**doc, "_id": r.inserted_id})
+
+
+@router.delete("/assets/{aid}")
+async def delete_asset(aid: str, user: dict = Depends(require_society_admin)):
+    await db.assets.delete_one({"_id": ObjectId(aid)})
+    return {"status": "deleted"}
+
+
+# ---------------- Society Committee ----------------
+@router.get("/committee")
+async def list_committee(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    return [_clean(d) for d in await db.committee.find({"society_id": sid}).sort("created_at", -1).to_list(200)]
+
+
+@router.post("/committee")
+async def create_committee(body: dict, society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    doc = {"society_id": sid, "name": (body.get("name") or "").strip(),
+           "role": (body.get("role") or "Member").strip(), "tower": (body.get("tower") or "").strip(),
+           "phone": (body.get("phone") or "").strip(), "email": (body.get("email") or "").strip(),
+           "created_at": now_iso()}
+    if not doc["name"]:
+        raise HTTPException(status_code=400, detail="Member name required")
+    r = await db.committee.insert_one(doc)
+    await audit.log(sid, "committee_added", f"{doc['name']} added to committee as {doc['role']}", actor=_actor(user), category="committee")
+    return _clean({**doc, "_id": r.inserted_id})
+
+
+@router.delete("/committee/{cid}")
+async def delete_committee(cid: str, user: dict = Depends(require_society_admin)):
+    await db.committee.delete_one({"_id": ObjectId(cid)})
+    return {"status": "deleted"}
+
+
+# ---------------- Escalated tickets ----------------
+@router.get("/tickets/escalated")
+async def escalated_tickets(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    now_str = datetime.now(timezone.utc).isoformat()
+    q = {"society_id": sid, "$or": [
+        {"status": "Escalated"},
+        {"status": {"$in": ["Open", "Pending"]}, "sla_due": {"$lt": now_str}},
+    ]}
+    return [_clean(t) for t in await db.tickets.find(q).sort("created_at", -1).to_list(100)]
+
+
+# ---------------- Ticket assignment logic (config view) ----------------
+@router.get("/assignment-config")
+async def assignment_config(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    vendors = await db.vendors.find({"society_id": sid, "active": True}).to_list(500)
+    cats = {}
+    for v in vendors:
+        for c in v.get("categories", []):
+            cats[c] = cats.get(c, 0) + 1
+    coverage = [{"category": c, "vendors": n} for c, n in sorted(cats.items())]
+    return {
+        "sla": [
+            {"severity": "Critical", "hours": 2, "color": "#dc2626"},
+            {"severity": "High", "hours": 4, "color": "#ef4444"},
+            {"severity": "Medium", "hours": 24, "color": "#d97706"},
+            {"severity": "Low", "hours": 72, "color": "#16a34a"},
+        ],
+        "coverage": coverage,
+        "vendor_count": len(vendors),
+    }
+
+
 @router.get("/tickets")
 async def list_tickets(society_id: str = None, status: str = None, category: str = None,
                        search: str = None, user: dict = Depends(require_society_admin)):

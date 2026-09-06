@@ -1,5 +1,14 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Feature (2026-06) — 4 new society tabs from Admin Dashboard reference
+Added, styled to match `Propto_Admin_Dashboard.html` (blue/indigo cards, colored top-border stat cards, grid tables) using existing `DashKit` components:
+- **Assets** (`/assets`): register with stat cards (total/due soon/overdue/scheduled) + table + Add Asset dialog. Backend: `GET/POST/DELETE /api/society/assets` (collection `assets`).
+- **Escalated** (`/escalated`): red panel, grid table (Ticket ID/Issue/Unit/Resident/Reason/SLA/Assign) with SLABar; "Assign Now" → Tickets. Backend: `GET /api/society/tickets/escalated` (status=Escalated OR Open/Pending past sla_due).
+- **Committee** (`/committee`): member cards (role-colored avatar/badge, tower/phone/email) + Add Member dialog. Backend: `GET/POST/DELETE /api/society/committee` (collection `committee`).
+- **Assignment Logic** (`/assignment-logic`): read-only routing view — 6-step flow tiles, SLA-by-severity table, live vendor coverage by category. Backend: `GET /api/society/assignment-config`.
+Nav + routes added in `Layout.jsx` + `App.js`. All endpoints society-scoped (super-admin scope-aware). Verified via curl (all 4) + screenshots (Assets, Assignment Logic render correctly). Frontend compiles clean.
+
+
 ## Architecture change (2026-06) — Redis queue + async worker + Gemini-first classification (VPS)
 User moved to a VPS with Redis and requested a queue/worker pipeline (Redis+BullMQ pattern, implemented in Python) and a reordered classification.
 New flow: WhatsApp → Webhook → (REDIS_URL set) LPUSH to Redis + return 200 → `worker.py` (persistent) BRPOPLPUSH → pre-filter → Gemini "is this a complaint?" (+extract) → 10,000 taxonomy enrich → if no match, Gemini generates ticket content → ticket.

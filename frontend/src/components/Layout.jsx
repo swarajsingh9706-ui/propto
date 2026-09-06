@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Ticket, Users, Wrench, Bot, ClipboardCheck,
   MessageSquare, BarChart3, Building2, LogOut, ChevronLeft, Vote, ScrollText,
+  Package, AlertTriangle, UsersRound, Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -15,10 +16,14 @@ const SUPER_NAV = [
 const SOCIETY_NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/tickets", label: "Tickets", icon: Ticket },
+  { to: "/escalated", label: "Escalated", icon: AlertTriangle },
   { to: "/vendors", label: "Vendors", icon: Wrench },
+  { to: "/assets", label: "Assets", icon: Package },
   { to: "/residents", label: "Residents", icon: Users },
+  { to: "/committee", label: "Committee", icon: UsersRound },
   { to: "/ai-activity", label: "AI Activity", icon: Bot },
   { to: "/review-queue", label: "Review Queue", icon: ClipboardCheck },
+  { to: "/assignment-logic", label: "Assignment Logic", icon: Workflow },
   { to: "/suggestions", label: "Suggestions", icon: Vote },
   { to: "/audit", label: "Audit Log", icon: ScrollText },
   { to: "/reports", label: "Reports", icon: BarChart3 },
