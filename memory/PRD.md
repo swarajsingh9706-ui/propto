@@ -195,3 +195,12 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Added safe Gemini health logging in `_call_llm` ("Gemini OK (N chars)" / "Gemini returned empty" / failure warning) — never logs the key. Visible in worker/API logs to diagnose VPS key issues.
 - Kept current behavior for genuine non-complaints (greetings/ads still ignored via prefilter + no keyword hit).
 - Verified: with Gemini disabled, all 3 lift msgs + "No water" -> Complaint with tickets; greetings/ads correctly ignored. E2e via simulate endpoint created ticket TKT-260906-DF5AF.
+
+## Switched LLM Gemini -> OpenAI (2026-06 update)
+- User request: use OpenAI (model gpt-5.6-luna) instead of Gemini for message processing; prefilter must drop ONLY greeting messages (everything else goes to OpenAI to decide complaint-or-not).
+- `backend/ai_engine.py`: `_call_llm` now prefers user's own OPENAI_API_KEY via official openai SDK (`_openai_native`, JSON mode, model from OPENAI_MODEL env, default gpt-5.6-luna); falls back to EMERGENT_LLM_KEY via emergentintegrations openai path (preview/Emergent env only). Removed `_gemini_native` and google.generativeai usage.
+- `prefilter()`: drops only empty + pure greetings; removed AD_WORDS/FESTIVAL_WORDS/length gate. Ads/spam now judged by OpenAI.
+- Health logging: "OpenAI OK/empty/failed" (never logs the key) for VPS diagnosis.
+- Deterministic safety net (taxonomy/keyword override) retained as backstop.
+- VPS config: `.env.vps` + DEPLOYMENT.md/DEPLOYMENT_VPS.md switched from GEMINI_API_KEY to OPENAI_API_KEY + OPENAI_MODEL=gpt-5.6-luna.
+- Verified e2e via simulate endpoint: Hinglish lift/leak -> tickets created; greeting + ad -> ignored (ad decided by OpenAI). VPS action: set OPENAI_API_KEY, remove GEMINI_API_KEY, restart API+worker.

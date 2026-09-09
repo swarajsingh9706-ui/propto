@@ -2,7 +2,7 @@
 
 The webhook LPUSHes a job and returns 200 instantly; a separate long-running
 worker (worker.py) consumes jobs with a reliable BRPOPLPUSH pattern and runs the
-Gemini -> taxonomy -> ticket pipeline. If REDIS_URL is not set, callers fall back
+OpenAI -> taxonomy -> ticket pipeline. If REDIS_URL is not set, callers fall back
 to inline processing so the app still works without Redis.
 """
 import os

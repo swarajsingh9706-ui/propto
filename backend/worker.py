@@ -4,7 +4,7 @@ Run this as a persistent process on your VPS (systemd service — see DEPLOYMENT
     python worker.py
 
 It BRPOPLPUSHes jobs from the Redis queue and runs the full pipeline
-(pre-filter -> Gemini complaint check -> 10k taxonomy -> Gemini ticket content
+(pre-filter -> OpenAI complaint check -> 10k taxonomy -> OpenAI ticket content
 -> ticket creation). One process = one asyncio loop = one Motor client, so there
 is no event-loop/DB conflict.
 """

@@ -7,9 +7,9 @@ WhatsApp → Whapi → Webhook (FastAPI) → save+LPUSH to Redis → 200 OK
                                                    │
                                         PROPTO worker (worker.py)
                                                    │
-                              pre-filter → Gemini (complaint?) → 10k taxonomy
+                              pre-filter → OpenAI (complaint?) → 10k taxonomy
                                                    │ (no match)
-                                          Gemini generates ticket content
+                                          OpenAI generates ticket content
                                                    │
                                             Ticket created (Atlas)
 ```
@@ -73,7 +73,8 @@ CORS_ORIGINS=https://manage.propto.app
 JWT_SECRET=... (pre-filled)
 ADMIN_EMAIL=superadmin@propto.com
 ADMIN_PASSWORD=Propto@Admin2026
-GEMINI_API_KEY=... (your key, pre-filled)
+OPENAI_API_KEY=... (your OpenAI key)
+OPENAI_MODEL=gpt-5.6-luna
 WHAPI_TOKEN=... (pre-filled)
 WHAPI_BASE=https://gate.whapi.cloud
 AI_CONFIDENCE_THRESHOLD=0.7
@@ -198,8 +199,8 @@ Set the webhook to `https://api.propto.app/api/whapi/webhook`, enable modes
   ```bash
   journalctl -u propto-worker -f
   ```
-  You should see it dequeued, Gemini classify it, taxonomy match, ticket created.
-- Send *"good morning"* → worker logs it as ignored (no Gemini call).
+  You should see it dequeued, OpenAI classify it, taxonomy match, ticket created.
+- Send *"good morning"* → worker logs it as ignored (no OpenAI call).
 
 ---
 
@@ -207,8 +208,8 @@ Set the webhook to `https://api.propto.app/api/whapi/webhook`, enable modes
 - `routers/whatsapp_router.py`: webhook → if `REDIS_URL` set, `task_queue.enqueue(...)` and return 200; else process inline.
 - `task_queue.py`: `LPUSH propto:webhooks`.
 - `worker.py`: reliable `BRPOPLPUSH propto:webhooks propto:webhooks:processing`, runs the pipeline, `LREM` on completion.
-- `ai_engine.prefilter()`: drops greetings/spam BEFORE any Gemini call.
-- `ai_engine.analyze_message()`: Gemini decides complaint + extracts fields → 10k taxonomy enriches category/severity/routing → if no match, Gemini's content builds the ticket.
+- `ai_engine.prefilter()`: drops ONLY greetings BEFORE any OpenAI call.
+- `ai_engine.analyze_message()`: OpenAI decides complaint + extracts fields → 10k taxonomy enriches category/severity/routing → if no match, OpenAI's content builds the ticket. Deterministic safety net (taxonomy/keyword) still creates a ticket if OpenAI fails or misclassifies.
 
 ## Ops cheatsheet
 ```bash

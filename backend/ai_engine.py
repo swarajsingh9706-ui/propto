@@ -11,12 +11,6 @@ GREETING_WORDS = [
     "good morning", "good evening", "good night", "gm", "gn", "hi", "hello", "hey",
     "thanks", "thank you", "welcome", "congrats", "congratulations",
 ]
-FESTIVAL_WORDS = [
-    "happy diwali", "happy new year", "happy holi", "eid mubarak", "merry christmas",
-    "happy birthday", "festival", "wishes", "blessed",
-]
-AD_WORDS = ["sale", "offer", "discount", "buy now", "for sale", "selling", "brand new", "%off", "% off", "contact for booking"]
-
 COMPLAINT_KEYWORDS = [
     "water", "leak", "leakage", "leaking", "plumb", "tap", "pipe", "drain", "seepage", "flush",
     "electric", "power", "current", "light", "fan", "switch", "wiring", "socket", "mcb", "short circuit",
@@ -34,7 +28,7 @@ COMPLAINT_KEYWORDS = [
 
 
 # Keyword -> app category groups. Used for the deterministic safety net so genuine
-# complaints are never dropped when Gemini fails or misclassifies (e.g. Hinglish).
+# complaints are never dropped when OpenAI fails or misclassifies (e.g. Hinglish).
 KEYWORD_CATEGORIES = [
     ("Lift", ["lift", "elevator"]),
     ("Plumbing", ["water", "leak", "leakage", "leaking", "seepage", "drain", "pipe", "tap",
@@ -70,23 +64,16 @@ def strong_keyword_hit(text: str):
 
 
 def prefilter(text: str) -> dict:
-    """Cheap gate BEFORE any LLM call. Drops only obvious non-complaints
-    (empty/greeting/festival/ad). Everything else is forwarded to Gemini, which
-    makes the final complaint-or-not decision."""
+    """Cheap gate BEFORE the LLM. Drops ONLY greeting messages (and empty text);
+    every other message is sent to OpenAI, which makes the complaint-or-not decision."""
     t = (text or "").lower().strip()
-    if not t or len(t) < 4:
-        return {"forward": False, "reason": "Empty/too short"}
-    for w in AD_WORDS:
-        if w in t:
-            return {"forward": False, "reason": "Advertisement/Spam"}
-    for w in FESTIVAL_WORDS:
-        if w in t:
-            return {"forward": False, "reason": "Festival wish"}
+    if not t:
+        return {"forward": False, "reason": "Empty"}
     stripped = re.sub(r"[^a-z ]", "", t)
     words = [w for w in stripped.split() if w]
     if words and all(w in GREETING_WORDS for w in words):
         return {"forward": False, "reason": "Greeting"}
-    return {"forward": True, "reason": "Forwarded to Gemini"}
+    return {"forward": True, "reason": "Forwarded to OpenAI"}
 
 
 def rule_filter(text: str) -> dict:
@@ -126,20 +113,24 @@ def _extract_unit(text: str):
     return flat, tower
 
 
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
+
+
 async def _call_llm(text: str) -> str:
-    """Use the user's own Gemini key when self-hosting; else the Emergent LLM key.
-    Degrades gracefully (returns "") if no LLM is configured or a call fails."""
-    gkey = os.environ.get("GEMINI_API_KEY")
-    if gkey:
+    """Use the user's own OpenAI key when self-hosting (OPENAI_API_KEY); else the
+    Emergent universal LLM key (preview/Emergent env only). Returns "" and logs on
+    failure so the deterministic safety net can still catch genuine complaints."""
+    okey = os.environ.get("OPENAI_API_KEY")
+    if okey:
         try:
-            out = await asyncio.wait_for(asyncio.to_thread(_gemini_native, text, gkey), timeout=15)
+            out = await asyncio.wait_for(asyncio.to_thread(_openai_native, text, okey), timeout=20)
             if out and out.strip():
-                logger.info("Gemini OK (%d chars)", len(out))
+                logger.info("OpenAI OK (%d chars)", len(out))
             else:
-                logger.warning("Gemini returned empty response")
+                logger.warning("OpenAI returned empty response")
             return out
         except Exception as e:
-            logger.warning("Gemini call failed/timed out: %s", e)
+            logger.warning("OpenAI call failed/timed out: %s", e)
             return ""
     if os.environ.get("EMERGENT_LLM_KEY"):
         try:
@@ -148,22 +139,34 @@ async def _call_llm(text: str) -> str:
                 api_key=os.environ["EMERGENT_LLM_KEY"],
                 session_id="propto-ai",
                 system_message=SYSTEM_PROMPT,
-            ).with_model("gemini", "gemini-2.5-flash")
-            resp = await asyncio.wait_for(chat.send_message(UserMessage(text=f"Message: {text}")), timeout=15)
-            return resp if isinstance(resp, str) else str(resp)
+            ).with_model("openai", OPENAI_MODEL)
+            resp = await asyncio.wait_for(chat.send_message(UserMessage(text=f"Message: {text}")), timeout=20)
+            out = resp if isinstance(resp, str) else str(resp)
+            if out and out.strip():
+                logger.info("OpenAI (Emergent) OK (%d chars)", len(out))
+            else:
+                logger.warning("OpenAI (Emergent) returned empty response")
+            return out
         except Exception as e:
             logger.warning("Emergent LLM call failed: %s", e)
             return ""
-    logger.warning("No LLM configured (set GEMINI_API_KEY) — skipping AI classification")
+    logger.warning("No LLM configured (set OPENAI_API_KEY) — skipping AI classification")
     return ""
 
 
-def _gemini_native(text: str, key: str) -> str:
-    import google.generativeai as genai
-    genai.configure(api_key=key)
-    model = genai.GenerativeModel("gemini-2.5-flash", system_instruction=SYSTEM_PROMPT)
-    resp = model.generate_content(f"Message: {text}", request_options={"timeout": 12})
-    return getattr(resp, "text", "") or ""
+def _openai_native(text: str, key: str) -> str:
+    from openai import OpenAI
+    client = OpenAI(api_key=key)
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"Message: {text}"},
+        ],
+        response_format={"type": "json_object"},
+        timeout=18,
+    )
+    return resp.choices[0].message.content or ""
 
 
 async def _ai_classify(text: str) -> dict:
@@ -197,29 +200,29 @@ async def _ai_classify(text: str) -> dict:
 
 
 async def analyze_message(text: str) -> dict:
-    """Flow: Gemini decides complaint-or-not (+ extracts flat/priority/description),
+    """Flow: OpenAI decides complaint-or-not (+ extracts flat/priority/description),
     THEN the 10,000-row taxonomy enriches category/severity/routing if present,
-    ELSE the Gemini-generated content is used to build the ticket.
+    ELSE the OpenAI-generated content is used to build the ticket.
 
-    Safety net: if Gemini says NotComplaint OR the Gemini call failed/returned empty,
+    Safety net: if OpenAI says NotComplaint OR the OpenAI call failed/returned empty,
     but the message strongly matches the 10,000-row taxonomy or a complaint keyword,
     we override to a valid Complaint so genuine issues are never silently dropped."""
-    # 1) Gemini: is this an actual complaint? (also extracts flat/tower/priority/description)
+    # 1) OpenAI: is this an actual complaint? (also extracts flat/tower/priority/description)
     ai = await _ai_classify(text)
 
-    # 2) Deterministic signals (independent of Gemini).
+    # 2) Deterministic signals (independent of OpenAI).
     import situations_kb
     kb = situations_kb.match(text)
     kw_hit, kw_cat = strong_keyword_hit(text)
 
-    # 3) Override NotComplaint / Gemini-failure when there's a real complaint signal.
+    # 3) Override NotComplaint / OpenAI-failure when there's a real complaint signal.
     if ai.get("intent") != "Complaint" and (kb or kw_hit):
         reason = "taxonomy_match" if kb else "keyword_match"
-        logger.info("Complaint override applied (%s); Gemini intent=%s llm_ok=%s",
+        logger.info("Complaint override applied (%s); LLM intent=%s llm_ok=%s",
                     reason, ai.get("intent"), ai.get("_llm_ok"))
         ai["intent"] = "Complaint"
         ai["override_reason"] = reason
-        # When Gemini failed, ensure sane defaults for ticket creation.
+        # When OpenAI failed, ensure sane defaults for ticket creation.
         if not ai.get("description"):
             ai["description"] = text[:150]
         if kw_cat and not ai.get("category"):
@@ -245,7 +248,7 @@ async def analyze_message(text: str) -> dict:
         ai["confidence"] = max(float(ai.get("confidence", 0) or 0), 0.9)
         ai["source_of_truth"] = "excel"
     else:
-        # 5) No taxonomy match -> rely on the Gemini-generated (or keyword-derived) content.
+        # 5) No taxonomy match -> rely on the OpenAI-generated (or keyword-derived) content.
         if kw_cat:
             ai["routing_category"] = ai.get("routing_category") or kw_cat
         ai["source_of_truth"] = "ai"
