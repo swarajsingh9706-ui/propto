@@ -81,18 +81,100 @@ def rule_filter(text: str) -> dict:
     return prefilter(text)
 
 
-SYSTEM_PROMPT = f"""You are an AI that analyzes WhatsApp messages from a residential society group to detect maintenance complaints.
-Valid complaint categories: {", ".join(COMPLAINT_CATEGORIES)}.
-Analyze the message and respond ONLY with a strict minified JSON object, no markdown, no explanation, with keys:
+# Society issue topics — a message is a Complaint ONLY if it clearly reports a
+# specific problem/fault/grievance falling under one of these. (De-duplicated.)
+ISSUE_TOPICS = list(dict.fromkeys([
+    "Power / Electricity", "Voltage / Electrical Damage", "Lift / Elevator",
+    "Generator / DG Backup", "Water Supply", "Water Quality / TDS", "Hot Water / Solar",
+    "Plumbing / Leakage", "Gas Pipeline", "STP / Sewage / Drainage",
+    "Garbage / Housekeeping", "Parking", "Security / CCTV / Theft",
+    "Gate Access / Deliveries", "Amenities / Clubhouse / Pool / Gym",
+    "Noise / Construction", "Fire Safety / Smoke", "Pest / Insects / Animals",
+    "Common Area / Terrace / Structure", "Roads / External Works / Landscaping",
+    "Finance / Billing / Collections", "Staff / Vendor / Service Quality",
+    "Resident Behavior / Rule Violation", "Communication / Notices / Governance",
+    "Health / Safety / Emergency", "Intercom / Communication Devices",
+    "Parking Management System", "Gym / Fitness Equipment",
+    "Swimming Pool / Water Features", "Children Play Area / Sports",
+    "Society Events / Festivals", "Legal / Society Bye-Laws",
+    "Staff Attendance / Payroll", "Waste Segregation / Composting",
+    "Monsoon Preparedness", "Flat Interior Maintenance", "Domestic Help / Labour",
+    "Construction / Renovation Within Flat", "NRI / Absentee Resident",
+    "Tenant Onboarding / KYC", "Air Quality / Ventilation",
+    "Delivery / E-Commerce Handling", "Smart Metering / Sub-Metering",
+    "Horticulture / Gardening", "Noise / Sound Proofing",
+    "Society App / Digital Services", "Substation / HT Connection",
+    "Painting / Waterproofing AMC", "Plumbing AMC / Annual Maintenance",
+    "Electrical AMC / Wiring Maintenance", "Parking Allocation / Disputes",
+    "Staircase / Common Corridor", "Senior Citizen Amenities",
+    "Indoor Games / Recreation", "Library / Study Room", "Pet Policy / Animal Care",
+    "Gate Access / Entry Management", "Natural Disaster / Emergency Response",
+    "AGM / Committee / Elections", "Rooftop / Terrace Access & Maintenance",
+    "Balcony / Window / External Facade", "Society Governance / Transparency",
+    "Emergency Evacuation / Safety Drills", "Vandalism / Anti-Social Behaviour",
+    "Document / Record Management", "Community Well-Being / Mental Health",
+    "Visitor / Guest Policy", "CCTV / Surveillance", "Society Property / Asset Management",
+    "Flood / Drainage", "Society Cyber Security", "Infrastructure Defects / Builder Warranty",
+    "Seasonal / Weather Specific", "Drinking Water & RO Plant", "Gas Pipeline & PNG Supply",
+    "Solar Hot Water System", "STP & Sewage Treatment Plant", "Fire Safety Systems",
+    "Electrical Issues Within Flat", "Plumbing Issues Within Flat",
+    "Air Conditioning & Cooling In Flat", "Internet & Cable TV Services",
+    "Home Security Within Flat", "Housekeeping & Sanitation",
+    "Society Office & Administration", "Security System & Guard Operations",
+    "Noise from Neighbours", "Waterproofing & Seepage Issues",
+    "Resident Disputes & Mediation", "Structural & Civil Works",
+    "Building Maintenance & Annual Works", "Water Pump & Motor",
+    "Pest & Insect Control", "Staff Welfare & HR", "Vendor & Contract Management",
+    "Flat Access & Key Management", "Adjacent Construction Impact",
+    "Society Road & Internal Traffic", "New Amenity Requests",
+    "Smart Society Technology", "Garbage Room & Chute", "Painting & Surface Maintenance",
+    "AC & HVAC Common Area", "Swimming Pool Operations", "Internet & Communication Infrastructure",
+    "Domestic Help Management", "Society Vehicle & Equipment", "Building Envelope & Exterior",
+    "Resident Onboarding & Offboarding", "Neighbour Relations & Etiquette",
+    "Sustainability & Green Initiatives", "Digital Payments & Billing Systems",
+    "Amenity Booking & Usage", "Special Needs & Accessibility",
+    "Utilities Coordination & Municipal", "Construction & Renovation Governance",
+    "Emergency Medical & Health Response", "Society Records Digitisation",
+    "Society Communication Channels", "Common Area Furniture & Fittings",
+    "Common Area Usage Conflicts", "Lift Entrapment & Rescue", "Fire Incident Response",
+    "Water Emergency & Contamination", "Power Outage & Backup Failure",
+    "Structural Safety Alerts", "Security Breach & Incidents", "Sewage & Drainage Emergency",
+    "Gas Leak & Safety Emergency", "Pest Infestation Escalation", "Weather Emergency Response",
+    "Committee Transition & Handover", "Resident Safety Awareness",
+    "Society Financial Planning", "Resident Data & Privacy", "Amenity Safety Compliance",
+    "Utility Bill Disputes", "Society Notice Compliance", "Multi-Tower Coordination",
+    "Society Website & Online Presence", "Insurance & Claims Management",
+    "Society Store & Inventory", "Building Occupancy & Density",
+    "Post-Occupancy Building Performance", "Society Redevelopment",
+]))
+
+SYSTEM_PROMPT = f"""You are a strict classifier for a residential society WhatsApp group. Your job is to decide whether a message is a genuine COMPLAINT / ISSUE report that a society management team must act on.
+
+Mark "intent":"Complaint" ONLY IF ALL of these hold:
+1. The message clearly describes a SPECIFIC problem, fault, breakdown, shortage, damage, malfunction, outage, hazard or grievance about something concrete in the society or a flat.
+2. That problem clearly belongs to one of these society issue topics:
+{", ".join(ISSUE_TOPICS)}.
+3. It reads like the sender is reporting/complaining about that issue (not merely chatting, asking, or mentioning the topic in passing).
+
+Mark "intent":"NotComplaint" for everything else. Be STRICT — the following are NOT complaints:
+- greetings, thanks, congratulations, festival/birthday wishes, small talk, jokes, forwards, memes
+- general questions or requests for information ("what time is the meeting?", "who is the plumber?")
+- opinions, discussions, suggestions, feedback, poll messages, announcements, invitations, notices
+- buy/sell/rent ads, promotions, service offers
+- acknowledgements/replies like "ok", "done", "noted", "thanks", "sure"
+- vague or generic statements that do not name a specific problem (e.g. "society is nice", "good work team")
+If the message only mentions a topic without a clear, specific problem, choose NotComplaint. If unsure, choose NotComplaint with low confidence.
+
+Respond ONLY with a strict minified JSON object, no markdown, no explanation, with keys:
 "intent": "Complaint" or "NotComplaint",
-"category": one of the valid categories or "",
+"category": the single best-matching topic from the list above, or "",
 "flat": flat/unit number mentioned or "",
 "tower": tower/block/wing mentioned or "",
 "priority": "High", "Medium" or "Low",
 "preferred_time": any preferred visit time mentioned or "",
 "description": a concise one-line description of the complaint,
-"confidence": a float 0 to 1 indicating how confident you are this is a real maintenance complaint.
-High priority = safety/urgent (no water, no power, lift stuck, security, gas). Medium = normal repairs. Low = minor/cosmetic."""
+"confidence": a float 0 to 1 for how sure you are this is a REAL, specific complaint. Use >=0.8 only when it clearly reports a concrete problem; use <0.5 when it is chit-chat/ambiguous.
+High priority = safety/urgent (no water, no power, lift stuck/entrapment, fire/smoke/gas leak, security/theft, medical). Medium = normal repairs. Low = minor/cosmetic."""
 
 
 def _extract_unit(text: str):
@@ -215,11 +297,12 @@ async def analyze_message(text: str) -> dict:
     kb = situations_kb.match(text)
     kw_hit, kw_cat = strong_keyword_hit(text)
 
-    # 3) Override NotComplaint / OpenAI-failure when there's a real complaint signal.
-    if ai.get("intent") != "Complaint" and (kb or kw_hit):
+    # 3) Safety net — ONLY when the LLM failed/returned empty do we fall back to
+    #    taxonomy/keyword signals. When the LLM answered successfully we TRUST its
+    #    strict complaint-or-not verdict and never override a working "NotComplaint".
+    if ai.get("intent") != "Complaint" and not ai.get("_llm_ok") and (kb or kw_hit):
         reason = "taxonomy_match" if kb else "keyword_match"
-        logger.info("Complaint override applied (%s); LLM intent=%s llm_ok=%s",
-                    reason, ai.get("intent"), ai.get("_llm_ok"))
+        logger.info("LLM-failure fallback override (%s); llm_ok=%s", reason, ai.get("_llm_ok"))
         ai["intent"] = "Complaint"
         ai["override_reason"] = reason
         # When OpenAI failed, ensure sane defaults for ticket creation.

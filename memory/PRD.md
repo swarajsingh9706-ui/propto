@@ -204,3 +204,9 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Deterministic safety net (taxonomy/keyword override) retained as backstop.
 - VPS config: `.env.vps` + DEPLOYMENT.md/DEPLOYMENT_VPS.md switched from GEMINI_API_KEY to OPENAI_API_KEY + OPENAI_MODEL=gpt-5.6-luna.
 - Verified e2e via simulate endpoint: Hinglish lift/leak -> tickets created; greeting + ad -> ignored (ad decided by OpenAI). VPS action: set OPENAI_API_KEY, remove GEMINI_API_KEY, restart API+worker.
+
+## Strict complaint classification prompt (2026-06 update)
+- User: almost all messages were being marked as complaints. Wanted a message classified as a complaint ONLY if it clearly reports a specific issue/complaint under a provided list of ~180 society issue topics.
+- `backend/ai_engine.py`: embedded the user's issue-topic list as `ISSUE_TOPICS` (de-duplicated) and rewrote `SYSTEM_PROMPT` to a strict classifier — Complaint only if the message describes a specific problem/fault/grievance in one of those topics AND reads like a report/complaint; greetings, questions, opinions, announcements, ads, acknowledgements, and vague mentions => NotComplaint (low confidence when unsure). Category is chosen from the topic list.
+- Restricted the deterministic safety net: taxonomy/keyword override now fires ONLY when the LLM call FAILED (`_llm_ok` False). A successful "NotComplaint" from OpenAI is trusted and never overridden (was a second cause of over-classification).
+- Verified e2e via simulate: lift stuck / no water / dead terrace light => tickets; AGM-time question, plumber-contact question, pool-open question, thanks, picnic chit-chat, gym poll, generic praise => ignored.
