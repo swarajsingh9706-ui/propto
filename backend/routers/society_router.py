@@ -283,13 +283,15 @@ async def assignment_config(society_id: str = None, user: dict = Depends(require
 
 @router.get("/tickets")
 async def list_tickets(society_id: str = None, status: str = None, category: str = None,
-                       search: str = None, user: dict = Depends(require_society_admin)):
+                       priority: str = None, search: str = None, user: dict = Depends(require_society_admin)):
     sid = society_id or _sid(user)
     q = {"society_id": sid}
     if status and status != "all":
         q["status"] = status
     if category and category != "all":
         q["category"] = category
+    if priority and priority != "all":
+        q["priority"] = priority
     if search:
         q["$or"] = [
             {"ticket_number": {"$regex": search, "$options": "i"}},

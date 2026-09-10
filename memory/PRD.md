@@ -210,3 +210,12 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - `backend/ai_engine.py`: embedded the user's issue-topic list as `ISSUE_TOPICS` (de-duplicated) and rewrote `SYSTEM_PROMPT` to a strict classifier — Complaint only if the message describes a specific problem/fault/grievance in one of those topics AND reads like a report/complaint; greetings, questions, opinions, announcements, ads, acknowledgements, and vague mentions => NotComplaint (low confidence when unsure). Category is chosen from the topic list.
 - Restricted the deterministic safety net: taxonomy/keyword override now fires ONLY when the LLM call FAILED (`_llm_ok` False). A successful "NotComplaint" from OpenAI is trusted and never overridden (was a second cause of over-classification).
 - Verified e2e via simulate: lift stuck / no water / dead terrace light => tickets; AGM-time question, plumber-contact question, pool-open question, thanks, picnic chit-chat, gym poll, generic praise => ignored.
+
+## Tickets page filter/column enhancements (2026-06 update)
+- `backend/routers/society_router.py` GET /society/tickets: added `priority` query param filter (in addition to status/category/search).
+- `frontend/src/pages/society/Tickets.jsx`:
+  - Added "High Priority" toggle button (Flame icon) -> filters priority=High.
+  - Added "Closed" to status options in both the dropdown and pills (STATUSES const).
+  - Status + Category now available as clickable pill rows AND the existing dropdowns (shared state, either works).
+  - Table: added Resident (resident_name) and Date & Time (created_at, fmtDT) columns; removed the Source column.
+- Verified: backend priority=High (10) / status=Closed (0) via curl; UI screenshots confirm pills, High Priority active state, resident + date columns.

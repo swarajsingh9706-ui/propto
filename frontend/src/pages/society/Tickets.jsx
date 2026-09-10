@@ -12,9 +12,30 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
-import { Search, Loader2, Bot, CheckCircle2, UserPlus, Clock } from "lucide-react";
+import { Search, Loader2, Bot, CheckCircle2, UserPlus, Clock, Flame } from "lucide-react";
 
 const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control"];
+const STATUSES = ["all", "Open", "Pending", "Resolved", "Escalated", "Closed"];
+
+const fmtDT = (s) => {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (isNaN(d)) return "—";
+  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+};
+
+const FilterPill = ({ active, onClick, children, testid }) => (
+  <button
+    type="button"
+    data-testid={testid}
+    onClick={onClick}
+    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+      active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-zinc-600 hover:bg-secondary"
+    }`}
+  >
+    {children}
+  </button>
+);
 
 export default function Tickets() {
   const cfg = useScope();
@@ -23,18 +44,19 @@ export default function Tickets() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
+  const [priority, setPriority] = useState("all");
   const [selected, setSelected] = useState(null);
   const [vendors, setVendors] = useState([]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/society/tickets", { params: { ...cfg.params, status, category, search } });
+      const { data } = await api.get("/society/tickets", { params: { ...cfg.params, status, category, priority, search } });
       setTickets(data);
     } catch (e) { toast.error(apiError(e)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status, category]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status, category, priority]);
   useEffect(() => { const t = setTimeout(load, 400); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
   useEffect(() => { api.get("/society/vendors", cfg).then((r) => setVendors(r.data)); /* eslint-disable-next-line */ }, []);
 
@@ -65,15 +87,23 @@ export default function Tickets() {
     <div className="p-8">
       <PageHeader title="Complaint Management" subtitle="Tickets" />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <Input data-testid="ticket-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ticket, flat, resident…" className="pl-9" />
         </div>
+        <Button
+          data-testid="filter-priority-high"
+          type="button"
+          variant={priority === "High" ? "default" : "outline"}
+          onClick={() => setPriority((p) => (p === "High" ? "all" : "High"))}
+        >
+          <Flame className="mr-1.5 h-4 w-4" />High Priority
+        </Button>
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger data-testid="filter-status" className="w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {["all", "Open", "Pending", "Resolved", "Escalated"].map((s) => <SelectItem key={s} value={s}>{s === "all" ? "All Status" : s}</SelectItem>)}
+            {STATUSES.map((s) => <SelectItem key={s} value={s}>{s === "all" ? "All Status" : s}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={category} onValueChange={setCategory}>
@@ -85,6 +115,22 @@ export default function Tickets() {
         </Select>
       </div>
 
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[11px] font-medium uppercase tracking-wider text-zinc-400">Status</span>
+        {STATUSES.map((s) => (
+          <FilterPill key={s} testid={`pill-status-${s}`} active={status === s} onClick={() => setStatus(s)}>
+            {s === "all" ? "All" : s}
+          </FilterPill>
+        ))}
+      </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[11px] font-medium uppercase tracking-wider text-zinc-400">Category</span>
+        <FilterPill testid="pill-category-all" active={category === "all"} onClick={() => setCategory("all")}>All</FilterPill>
+        {CATEGORIES.map((c) => (
+          <FilterPill key={c} testid={`pill-category-${c}`} active={category === c} onClick={() => setCategory(c)}>{c}</FilterPill>
+        ))}
+      </div>
+
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
           <thead className="border-b border-border bg-secondary/50 text-left">
@@ -93,25 +139,27 @@ export default function Tickets() {
               <th className="px-5 py-3 font-medium">Category</th>
               <th className="px-5 py-3 font-medium">Flat</th>
               <th className="px-5 py-3 font-medium">Priority</th>
+              <th className="px-5 py-3 font-medium">Resident</th>
               <th className="px-5 py-3 font-medium">Vendor</th>
               <th className="px-5 py-3 font-medium">Status</th>
-              <th className="px-5 py-3 font-medium">Source</th>
+              <th className="px-5 py-3 font-medium">Date &amp; Time</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" /></td></tr>
+              <tr><td colSpan={8} className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" /></td></tr>
             ) : tickets.length === 0 ? (
-              <tr><td colSpan={7} className="py-16 text-center text-sm text-zinc-400">No tickets found</td></tr>
+              <tr><td colSpan={8} className="py-16 text-center text-sm text-zinc-400">No tickets found</td></tr>
             ) : tickets.map((t) => (
               <tr key={t.id} data-testid={`ticket-row-${t.ticket_number}`} onClick={() => openTicket(t)} className="cursor-pointer border-b border-border last:border-0 hover:bg-secondary/50">
                 <td className="px-5 py-3 font-mono text-xs text-zinc-600">{t.ticket_number}</td>
                 <td className="px-5 py-3 font-medium">{t.category}</td>
                 <td className="px-5 py-3 text-zinc-500">{t.flat || "—"}</td>
                 <td className="px-5 py-3"><PriorityBadge priority={t.priority} /></td>
+                <td className="px-5 py-3 text-zinc-600" data-testid={`ticket-resident-${t.ticket_number}`}>{t.resident_name || <span className="text-zinc-300">Unknown</span>}</td>
                 <td className="px-5 py-3 text-zinc-500">{t.vendor_name || <span className="text-zinc-300">Unassigned</span>}</td>
                 <td className="px-5 py-3"><StatusBadge status={t.status} /></td>
-                <td className="px-5 py-3">{t.ai_generated ? <span className="inline-flex items-center gap-1 text-xs text-sky-600"><Bot className="h-3.5 w-3.5" />AI</span> : <span className="text-xs text-zinc-400">Manual</span>}</td>
+                <td className="px-5 py-3 whitespace-nowrap text-xs text-zinc-500" data-testid={`ticket-date-${t.ticket_number}`}>{fmtDT(t.created_at)}</td>
               </tr>
             ))}
           </tbody>
