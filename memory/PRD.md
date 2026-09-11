@@ -219,3 +219,13 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
   - Status + Category now available as clickable pill rows AND the existing dropdowns (shared state, either works).
   - Table: added Resident (resident_name) and Date & Time (created_at, fmtDT) columns; removed the Source column.
 - Verified: backend priority=High (10) / status=Closed (0) via curl; UI screenshots confirm pills, High Priority active state, resident + date columns.
+
+## Society Admin batch: assign/priority/filters/dates + taxonomy update (2026-06)
+1. Tickets: vendor assign now requires clicking an Assign/Reassign button (pendingVendor state; assign-vendor-confirm testid) instead of assigning on dropdown select.
+2. Vendors: per-category assignment priority (1 = gets ticket first). Vendor doc stores `priorities:{category:int}`; UI number input per category (onBlur save). `pipeline.pick_vendor` sorts by priorities[category] asc then load; missing/<=0 -> 999 sentinel. models VendorCreate/Update gained `priorities`.
+3. Residents: added search bar (name/flat/tower/phone) + All/Owner/Tenant filter buttons (client-side).
+4. Audit Log: each row shows exact date & time (fmtDT) + relative time.
+5. Reports: "Category-wise" recharts replaced with ranked "Top Issue Categories" horizontal bars (matches SuperDashboard/HTML reference style).
+6. Suggestions: each card shows exact date & time (created_at).
+7. Taxonomy: replaced with Propto_Updated_Taxonomy (3).xlsx -> rebuilt data/taxonomy.json = 16,157 items (4,736 vendor-routed / 11,421 in-house). situations_kb._XLSX updated to new URL. Backend restarted to reload cache. Match verified (electricity/leakage score 1.0).
+- Verified: testing agent iteration_8.json — 100% (7/7 frontend, backend 6 passed/1 skipped). No tenant in seed data so Tenant filter shows empty (not a bug).

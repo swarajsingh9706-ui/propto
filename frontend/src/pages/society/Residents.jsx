@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Loader2, Trash2, Upload, Users } from "lucide-react";
+import { Plus, Loader2, Trash2, Upload, Users, Search } from "lucide-react";
 
 const empty = { name: "", phone: "", flat: "", tower: "", status: "Owner" };
 
@@ -18,6 +18,8 @@ export default function Residents() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState("");
+  const [statusF, setStatusF] = useState("all");
   const fileRef = useRef();
 
   const create = async () => {
@@ -37,10 +39,18 @@ export default function Residents() {
     e.target.value = "";
   };
 
+  const filtered = (residents || []).filter((r) => {
+    if (statusF !== "all" && (r.status || "Owner") !== statusF) return false;
+    if (q) {
+      const s = q.toLowerCase();
+      return [r.name, r.flat, r.tower, r.phone].some((x) => (x || "").toLowerCase().includes(s));
+    }
+    return true;
+  });
+
   return (
     <div className="p-8">
-      <PageHeader title="Resident Management" subtitle="Residents">
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importFile} className="hidden" data-testid="import-file-input" />
+      <PageHeader title="Resident Management" subtitle="Residents">        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importFile} className="hidden" data-testid="import-file-input" />
         <Button data-testid="import-residents-btn" variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-1.5 h-4 w-4" />Import Excel</Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button data-testid="add-resident-btn"><Plus className="mr-1.5 h-4 w-4" />Add Resident</Button></DialogTrigger>
@@ -69,6 +79,26 @@ export default function Residents() {
 
       <p className="mb-4 text-xs text-zinc-400">Excel/CSV columns: <span className="font-mono">name, phone, flat, tower, status</span></p>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Input data-testid="resident-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, flat, tower or phone…" className="pl-9" />
+        </div>
+        {[["all", "All"], ["Owner", "Owners"], ["Tenant", "Tenants"]].map(([val, label]) => (
+          <button
+            key={val}
+            type="button"
+            data-testid={`resident-filter-${val.toLowerCase()}`}
+            onClick={() => setStatusF(val)}
+            className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
+              statusF === val ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-zinc-600 hover:bg-secondary"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {loading ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : (residents || []).length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-sm text-zinc-400"><Users className="mx-auto mb-3 h-8 w-8 text-zinc-300" />No residents yet.</div>
       ) : (
@@ -78,7 +108,9 @@ export default function Residents() {
               <tr><th className="px-5 py-3 font-medium">Name</th><th className="px-5 py-3 font-medium">Flat</th><th className="px-5 py-3 font-medium">Tower</th><th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium">Phone</th><th className="px-5 py-3"></th></tr>
             </thead>
             <tbody>
-              {residents.map((r) => (
+              {filtered.length === 0 ? (
+                <tr><td colSpan={6} className="py-12 text-center text-sm text-zinc-400">No residents match your filters</td></tr>
+              ) : filtered.map((r) => (
                 <tr key={r.id} data-testid={`resident-row-${r.id}`} className="border-b border-border last:border-0 hover:bg-secondary/50">
                   <td className="px-5 py-3 font-medium">{r.name}</td>
                   <td className="px-5 py-3 text-zinc-600">{r.flat || "—"}</td>

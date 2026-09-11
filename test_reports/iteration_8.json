@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 8: verified the 7 Society-Admin feature changes end-to-end. Backend: 6/7 pytest passed (1 skipped - no POST /society/tickets endpoint to directly exercise pick_vendor priority sort); confirmed vendor priorities persist via PUT /api/society/vendors/:id ({priorities:{...}}), /api/society/whatsapp/simulate 'Water tap leaking' -> ticket_created with new taxonomy category 'Flat Interior Maintenance' returned by AI, /api/society/audit rows have created_at, /api/society/reports returns categories list, /api/society/suggestions items have created_at. Frontend (Playwright, admin@greenvalley.com / Admin@123): (1) Tickets - Assign Vendor button (data-testid=assign-vendor-confirm) is disabled initially, remains disabled while the currently-assigned vendor is re-picked, becomes enabled after choosing a different vendor, and only assigns after clicking the button (toast 'Vendor assigned' appears, sheet updates, timeline gets 'Vendor assigned' event). (2) Filters: filter-priority-high, pill-status-Closed, Date & Time column, Resident column all present. (3) Vendors: Assignment priority number inputs per category render (data-testid=vendor-priority-<id>-<cat>); typing '9' + Tab shows 'Priority updated' toast and value 9 persists after page reload. (4) Residents: resident-search filters (empty-state 'No residents match your filters' appears for 'zzznonexistent'); resident-filter-owner/tenant/all buttons filter correctly (6 owners, 0 tenants in seed). (5) Audit Log: data-testid=audit-datetime-<id> shows exact 'Sep 11, 2026, 4:30 PM' + relative time. (6) Reports: title 'Top Issue Categories' rendered with 7 ranked horizontal bars data-testid=report-cat-0..6 (no recharts BarChart in that panel). (7) Suggestions: 5 cards, each with data-testid=suggestion-date-<id> like 'Aug 9, 2026, 9:42 AM'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "n/a", "issue": "Carry-over from iter7 (unchanged): CORS_ORIGINS='*' with allow_credentials=True; no brute-force lockout on /api/auth/login; asyncio.create_task(_seed_all()) result is not held in app.state (GC risk); Meta POST /api/webhook has no try/except around request.json(). Not in scope of iter8 feature batch."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_features.py",
+    "/app/test_reports/pytest/iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Tickets.jsx: pendingVendor state + disabled={!pendingVendor || pendingVendor === selected.vendor_id} correctly gates the Assign button. onValueChange only sets state; no network call is made until the Assign Vendor / Reassign Vendor button is clicked. Behaviour matches requirement.",
+    "Vendors.jsx setPriority: coerces to int, deletes key when empty/<=0, else stores. onBlur guard `(v.priorities?.[c] || '') !== e.target.value` correctly compares against string; verified '9' persisted and toast fired. Note: passing a JSON dict body without an explicit Content-Type header still works because the api axios client sets it globally.",
+    "pipeline.pick_vendor: priority missing/<=0/NaN is coerced to 999 sentinel; then sort by (priority asc, load asc). Logic is correct; end-to-end priority-ordering path was not exercised by tests because there is no direct 'create ticket' API - only the WhatsApp simulate path picks a vendor; consider adding a manual /society/tickets POST for QA or exposing pick_vendor via a dry-run endpoint.",
+    "Residents.jsx filter: uses (r.status || 'Owner'); if backend rows lack status, filter correctly defaults to Owner. Confirmed 6/6 seeded residents show as owners; no tenant seed data - main agent may seed at least one tenant so the Tenant filter has visible data.",
+    "AuditLog.jsx / Suggestions.jsx / Tickets.jsx fmtDT: all correctly guard NaN date; render locale-aware datetime.",
+    "Reports.jsx: correctly uses categories[0].count as max for bar scaling; slice(0,8) caps the list. Fine."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter8_features.py"],
+  "success_rate": {"backend": "100% (6 passed / 1 skipped - all in-scope features verified)", "frontend": "100% (7/7 feature items pass)"},
+  "test_credentials": "admin@greenvalley.com / Admin@123 (society_admin)",
+  "seed_data_creation": "1 test ticket created via /api/society/whatsapp/simulate ('Water tap leaking' -> TKT-260911-AA211, category Flat Interior Maintenance). Vendor 'BuildRight Civil' priorities.Civil left set to 2 after cleanup (was 2 before iter8 also). Vendor 'PowerLine Electricals' was assigned by the Reassign test to whichever ticket-row was first on the Tickets page (existing seeded ticket).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter8 pytest suite: /app/backend/tests/test_iter8_features.py (7 tests). One test is skipped (no direct POST /society/tickets endpoint); to exercise pick_vendor priority ordering end-to-end, drive it through /api/society/whatsapp/simulate with a phone whose category matches multiple vendors. Vendor priority input onBlur only fires on real focus loss - Playwright must use page.keyboard.press('Tab') (or click elsewhere); page.dispatch_event('blur') does NOT trigger React's onBlur.",
+  "rca_of_the_issue": "No new bugs found; all 7 requested changes correctly implemented on both frontend and backend."
+}

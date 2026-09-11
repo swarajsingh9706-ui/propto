@@ -47,6 +47,7 @@ export default function Tickets() {
   const [priority, setPriority] = useState("all");
   const [selected, setSelected] = useState(null);
   const [vendors, setVendors] = useState([]);
+  const [pendingVendor, setPendingVendor] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +64,7 @@ export default function Tickets() {
   const openTicket = async (t) => {
     const { data } = await api.get(`/society/tickets/${t.id}`);
     setSelected(data);
+    setPendingVendor(data.vendor_id || "");
   };
   const assign = async (vendorId) => {
     try {
@@ -196,7 +198,7 @@ export default function Tickets() {
 
                 <div>
                   <p className="overline mb-2">Assign / Reassign Vendor</p>
-                  <Select onValueChange={assign} value={selected.vendor_id || ""}>
+                  <Select onValueChange={setPendingVendor} value={pendingVendor || ""}>
                     <SelectTrigger data-testid="assign-vendor-select"><SelectValue placeholder="Select vendor" /></SelectTrigger>
                     <SelectContent>
                       {vendors.filter((v) => v.categories?.includes(selected.category)).map((v) => (
@@ -207,6 +209,16 @@ export default function Tickets() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <Button
+                    data-testid="assign-vendor-confirm"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={!pendingVendor || pendingVendor === selected.vendor_id}
+                    onClick={() => assign(pendingVendor)}
+                  >
+                    <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                    {selected.vendor_id ? "Reassign Vendor" : "Assign Vendor"}
+                  </Button>
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-2">

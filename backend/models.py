@@ -74,6 +74,7 @@ class VendorCreate(BaseModel):
     categories: List[str] = []
     availability: bool = True
     active: bool = True
+    priorities: dict = {}
 
 
 class VendorUpdate(BaseModel):
@@ -82,6 +83,7 @@ class VendorUpdate(BaseModel):
     categories: Optional[List[str]] = None
     availability: Optional[bool] = None
     active: Optional[bool] = None
+    priorities: Optional[dict] = None
 
 
 # ---------- Resident ----------

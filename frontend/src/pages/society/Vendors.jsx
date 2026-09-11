@@ -32,6 +32,14 @@ export default function Vendors() {
   const toggleCat = (c) => setForm((f) => ({ ...f, categories: f.categories.includes(c) ? f.categories.filter((x) => x !== c) : [...f.categories, c] }));
   const update = async (v, patch) => { try { await api.put(`/society/vendors/${v.id}`, patch); reload(); } catch (e) { toast.error(apiError(e)); } };
   const del = async (v) => { try { await api.delete(`/society/vendors/${v.id}`); reload(); toast.success("Removed"); } catch (e) { toast.error(apiError(e)); } };
+  const setPriority = async (v, cat, val) => {
+    const priorities = { ...(v.priorities || {}) };
+    const n = parseInt(val, 10);
+    if (val === "" || isNaN(n) || n <= 0) delete priorities[cat];
+    else priorities[cat] = n;
+    try { await api.put(`/society/vendors/${v.id}`, { priorities }); reload(); toast.success("Priority updated"); }
+    catch (e) { toast.error(apiError(e)); }
+  };
 
   return (
     <div className="p-8">
@@ -76,6 +84,27 @@ export default function Vendors() {
               <div className="mt-3 flex flex-wrap gap-1">
                 {v.categories?.map((c) => <span key={c} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-zinc-600">{c}</span>)}
               </div>
+              {v.categories?.length > 0 && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Assignment priority (1 = gets ticket first)</p>
+                  <div className="space-y-1.5">
+                    {v.categories.map((c) => (
+                      <div key={c} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-zinc-600">{c}</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          data-testid={`vendor-priority-${v.id}-${c}`}
+                          defaultValue={v.priorities?.[c] || ""}
+                          onBlur={(e) => { if ((v.priorities?.[c] || "") !== e.target.value) setPriority(v, c, e.target.value); }}
+                          placeholder="—"
+                          className="h-7 w-16 text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs">
                 <span className="text-zinc-500">{v.resolved}/{v.assigned} resolved</span>
                 <div className="flex items-center gap-3">

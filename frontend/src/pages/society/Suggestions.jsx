@@ -26,6 +26,13 @@ const STATUS_CLS = {
 
 const empty = { title: "", category: "Infrastructure", author_name: "", flat: "" };
 
+const fmtDT = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d)) return "";
+  return d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+};
+
 export default function Suggestions() {
   const cfg = useScope();
   const { data, loading, reload } = useFetch("/society/suggestions");
@@ -127,6 +134,7 @@ export default function Suggestions() {
                     {s.flat && <><span>·</span><span>{s.flat}</span></>}
                     <span>·</span>
                     <span className="rounded-full bg-brand-green/[0.08] px-2 py-0.5 font-medium text-brand">{s.category}</span>
+                    {s.created_at && <><span>·</span><span data-testid={`suggestion-date-${s.id}`}>{fmtDT(s.created_at)}</span></>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

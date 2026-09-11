@@ -36,16 +36,26 @@ export default function Reports() {
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-6">
-          <p className="overline mb-4">Category-wise</p>
+          <p className="overline mb-4">Top Issue Categories</p>
           {categories.length === 0 ? <NoData /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={categories} layout="vertical" margin={{ left: 30 }}>
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="category" width={90} tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ border: "1px solid #e4e4e7", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="count" fill="#0C4428" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="space-y-3.5">
+              {categories.slice(0, 8).map((c, i) => {
+                const max = categories[0].count || 1;
+                const pct = Math.round((c.count / max) * 100);
+                const bar = ["#2563eb", "#4f46e5", "#06b6d4", "#22c55e", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6"][i % 8];
+                return (
+                  <div key={c.category} data-testid={`report-cat-${i}`}>
+                    <div className="mb-1.5 flex items-center justify-between text-[13px]">
+                      <span className="truncate font-semibold text-slate-700">{c.category}</span>
+                      <span className="font-bold text-slate-500">{c.count}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100">
+                      <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: bar }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
         <div className="rounded-lg border border-border bg-card p-6">

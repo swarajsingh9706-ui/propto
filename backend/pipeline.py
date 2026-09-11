@@ -60,14 +60,22 @@ async def pick_vendor(society_id: str, category: str, exclude_id: str = None):
         vendors = [v for v in vendors if str(v["_id"]) != exclude_id]
     if not vendors:
         return None
-    best, best_load = None, None
+    # Order by admin-set priority for this category (1 = first), then least current load.
+    scored = []
     for v in vendors:
         load = await db.tickets.count_documents({
             "vendor_id": str(v["_id"]), "status": {"$in": ["Open", "Pending"]},
         })
-        if best is None or load < best_load:
-            best, best_load = v, load
-    return best
+        p = (v.get("priorities") or {}).get(category)
+        try:
+            p = int(p)
+            if p <= 0:
+                p = 999
+        except (TypeError, ValueError):
+            p = 999
+        scored.append((p, load, v))
+    scored.sort(key=lambda x: (x[0], x[1]))
+    return scored[0][2]
 
 
 async def add_timeline(ticket_id: str, event: str, detail: str = ""):

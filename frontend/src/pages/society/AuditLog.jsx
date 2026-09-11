@@ -27,6 +27,13 @@ function timeAgo(iso) {
   return d.toLocaleDateString();
 }
 
+function fmtDT(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return "—";
+  return d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export default function AuditLog() {
   const { data, loading } = useFetch("/society/audit");
   const [cat, setCat] = useState("all");
@@ -71,7 +78,10 @@ export default function AuditLog() {
                     {r.ticket_number && <> · <span className="font-mono text-[11px] text-brand">{r.ticket_number}</span></>}
                   </p>
                 </div>
-                <span className="whitespace-nowrap text-xs text-zinc-400">{timeAgo(r.created_at)}</span>
+                <span className="whitespace-nowrap text-right">
+                  <span className="block text-xs font-medium text-zinc-600" data-testid={`audit-datetime-${r.id}`}>{fmtDT(r.created_at)}</span>
+                  <span className="block text-[11px] text-zinc-400">{timeAgo(r.created_at)}</span>
+                </span>
               </div>
             );
           })}
