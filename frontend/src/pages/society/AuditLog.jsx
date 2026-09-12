@@ -40,7 +40,7 @@ export default function AuditLog() {
   const rows = (data || []).filter((r) => cat === "all" || r.category === cat);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Audit Log" subtitle="Activity Trail" />
 
       <div className="mb-5 flex flex-wrap gap-2">

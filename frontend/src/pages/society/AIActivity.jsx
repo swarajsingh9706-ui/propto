@@ -16,7 +16,7 @@ export default function AIActivity() {
   const { logs, stats } = data;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="AI Activity" subtitle="Detection Command Center" />
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <StatCard testid="ai-stat-total" label="Processed" value={stats.total} icon={Activity} />

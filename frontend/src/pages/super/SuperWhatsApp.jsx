@@ -18,7 +18,7 @@ export default function SuperWhatsApp() {
   const current = societies.find((s) => s.id === sel);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="WhatsApp Integration" subtitle="Super Admin">
         <Select value={sel} onValueChange={setSel}>
           <SelectTrigger data-testid="wa-society-select" className="w-64">

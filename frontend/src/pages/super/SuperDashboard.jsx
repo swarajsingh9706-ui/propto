@@ -29,7 +29,7 @@ export default function SuperDashboard() {
   return (
     <div className="flex min-h-screen flex-col">
       <TopHeader greeting={`Welcome back, ${firstName}!`} subtitle="Platform overview across all your societies" />
-      <div className="flex gap-5 px-6 py-5">
+      <div className="flex flex-col gap-5 px-4 py-5 sm:px-6 xl:flex-row">
         <div className="min-w-0 flex-1">
           <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
             {STATS.map((s) => (
@@ -43,7 +43,8 @@ export default function SuperDashboard() {
             {societies.length === 0 ? (
               <EmptyRow text="No societies yet. Add your first society to get started." />
             ) : (
-              <>
+              <div className="overflow-x-auto">
+                <div className="min-w-[680px]">
                 <RowHead cols="1.4fr 0.8fr 0.7fr 0.7fr 0.8fr 0.9fr 110px"
                   items={["SOCIETY", "STATUS", "TICKETS", "OPEN", "ESCALATED", "RESOLVED", "ACTION"]} />
                 {societies.map((s, i) => (
@@ -64,12 +65,13 @@ export default function SuperDashboard() {
                     </button>
                   </div>
                 ))}
-              </>
+                </div>
+              </div>
             )}
           </Panel>
         </div>
 
-        <div className="hidden w-[300px] flex-shrink-0 flex-col gap-3.5 xl:flex">
+        <div className="flex w-full flex-shrink-0 flex-col gap-3.5 xl:w-[300px]">
           <div className="grid grid-cols-1 gap-3.5">
             <DashStat testid="super-stat-overdue" value={stats.overdue ?? 0} label="Overdue Tickets" sub="Past SLA target" color="#ef4444" iconBg="#fee2e2" icon={Timer} />
             <DashStat testid="super-stat-vendors" value={stats.vendors ?? 0} label="Vendors" sub="Across platform" color="#7c3aed" iconBg="#f5f3ff" icon={Wrench} />

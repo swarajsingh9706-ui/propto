@@ -74,7 +74,7 @@ export default function Suggestions() {
   const list = filter === "All" ? suggestions : suggestions.filter((s) => s.status === filter);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Resident Suggestions" subtitle="Community Voting">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

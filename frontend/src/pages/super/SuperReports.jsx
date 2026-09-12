@@ -10,7 +10,7 @@ export default function SuperReports() {
   const { societies, categories, vendor_performance, totals } = data;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Platform Analytics" subtitle="Super Admin" />
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard testid="sr-societies" label="Societies" value={totals.societies} icon={Building2} />

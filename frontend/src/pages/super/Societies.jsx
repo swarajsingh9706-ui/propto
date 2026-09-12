@@ -60,7 +60,7 @@ export default function Societies() {
   const manage = (s) => { scopeInto(s.id); navigate("/dashboard"); };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Society Management" subtitle="Super Admin">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

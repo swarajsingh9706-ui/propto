@@ -17,7 +17,7 @@ export default function AssignmentLogic() {
   const cfg = data || { sla: [], coverage: [], vendor_count: 0 };
 
   return (
-    <div className="p-8" data-testid="assignment-logic-page">
+    <div className="p-4 sm:p-6 lg:p-8" data-testid="assignment-logic-page">
       <PageHeader title="Ticket Assignment Logic" subtitle="Routing Rules" />
 
       <Panel title="How a message becomes an assigned ticket" testid="flow-panel">

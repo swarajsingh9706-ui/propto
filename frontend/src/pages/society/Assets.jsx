@@ -48,7 +48,7 @@ export default function Assets() {
   const del = async (a) => { try { await api.delete(`/society/assets/${a.id}`); reload(); toast.success("Removed"); } catch (e) { toast.error(apiError(e)); } };
 
   return (
-    <div className="p-8" data-testid="assets-page">
+    <div className="p-4 sm:p-6 lg:p-8" data-testid="assets-page">
       <PageHeader title="Assets" subtitle="Asset Register">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button data-testid="add-asset-btn"><Plus className="mr-1.5 h-4 w-4" />Add Asset</Button></DialogTrigger>

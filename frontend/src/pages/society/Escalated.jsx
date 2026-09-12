@@ -16,7 +16,7 @@ export default function Escalated() {
   const rows = data || [];
 
   return (
-    <div className="p-8" data-testid="escalated-page">
+    <div className="p-4 sm:p-6 lg:p-8" data-testid="escalated-page">
       <PageHeader title="Escalated Tickets" subtitle="Needs Manual Action" />
       <Panel
         danger

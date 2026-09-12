@@ -86,7 +86,7 @@ export default function Tickets() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Complaint Management" subtitle="Tickets" />
 
       <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -133,8 +133,8 @@ export default function Tickets() {
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="border-b border-border bg-secondary/50 text-left">
             <tr className="text-[11px] uppercase tracking-wider text-zinc-500">
               <th className="px-5 py-3 font-medium">Ticket</th>

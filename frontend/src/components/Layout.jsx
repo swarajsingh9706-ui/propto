@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Ticket, Users, Wrench, Bot, ClipboardCheck,
   MessageSquare, BarChart3, Building2, LogOut, ChevronLeft, Vote, ScrollText,
-  Package, AlertTriangle, UsersRound, Workflow,
+  Package, AlertTriangle, UsersRound, Workflow, Menu, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -32,6 +33,7 @@ const SOCIETY_NAV = [
 export default function Layout({ children }) {
   const { user, logout, scopeSociety, scopeInto } = useAuth();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
   const isSuper = user?.role === "super_admin";
   const scoped = isSuper && scopeSociety;
   const nav = isSuper && !scoped ? SUPER_NAV : SOCIETY_NAV;
@@ -42,13 +44,22 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="fixed left-0 top-0 z-20 flex h-screen w-60 flex-col border-r border-border bg-card">
-        <div className="border-b border-border px-6 py-5">
+    <div className="min-h-screen">
+      {open && (
+        <div data-testid="sidebar-overlay" onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-black/40 lg:hidden" />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 z-40 flex h-screen w-60 flex-col border-r border-border bg-card transition-transform duration-200 lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        <div className="relative border-b border-border px-6 py-5">
           <img src="/propto-logo.png" alt="Propto" className="mx-auto h-20 w-auto object-contain" />
           <p className="mt-1 text-center text-[10px] uppercase tracking-[0.25em] text-brand-gold">
             {isSuper ? "Control Tower" : "Society Portal"}
           </p>
+          <button data-testid="sidebar-close" onClick={() => setOpen(false)} className="absolute right-3 top-3 rounded-md p-1 text-zinc-400 hover:bg-secondary lg:hidden">
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         {scoped && (
@@ -61,11 +72,12 @@ export default function Layout({ children }) {
           </button>
         )}
 
-        <nav className="flex-1 space-y-1 px-3 py-4">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={() => setOpen(false)}
               data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -93,19 +105,26 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      <main className="ml-60 flex-1 bg-background">{children}</main>
+      <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-card px-4 py-2.5 lg:hidden">
+        <button data-testid="sidebar-toggle" onClick={() => setOpen(true)} className="rounded-md p-1.5 text-zinc-700 hover:bg-secondary">
+          <Menu className="h-5 w-5" />
+        </button>
+        <img src="/propto-logo.png" alt="Propto" className="h-8 w-auto object-contain" />
+      </div>
+
+      <main className="bg-background lg:ml-60">{children}</main>
     </div>
   );
 }
 
 export function PageHeader({ title, subtitle, children }) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-4 sm:mb-8">
       <div>
         <p className="overline mb-1">{subtitle}</p>
-        <h1 className="font-cabinet text-3xl font-bold tracking-tight text-brand">{title}</h1>
+        <h1 className="font-cabinet text-2xl font-bold tracking-tight text-brand sm:text-3xl">{title}</h1>
       </div>
-      <div className="flex items-center gap-2">{children}</div>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
 }

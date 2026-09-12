@@ -12,7 +12,7 @@ export default function Reports() {
   const { daily, categories, resolution, vendor_performance, summary } = data;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Reports & Analytics" subtitle="Society Insights" />
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard testid="rep-total" label="Total Complaints" value={summary.total} icon={Ticket} />
@@ -73,9 +73,9 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
         <p className="overline border-b border-border px-6 py-4">Vendor Performance</p>
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[520px] text-sm">
           <thead className="border-b border-border bg-secondary/50 text-left text-[11px] uppercase tracking-wider text-zinc-500">
             <tr><th className="px-6 py-3 font-medium">Vendor</th><th className="px-6 py-3 font-medium">Assigned</th><th className="px-6 py-3 font-medium">Resolved</th><th className="px-6 py-3 font-medium">Rate</th></tr>
           </thead>

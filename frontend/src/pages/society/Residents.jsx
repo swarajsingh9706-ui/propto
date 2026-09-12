@@ -49,7 +49,7 @@ export default function Residents() {
   });
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Resident Management" subtitle="Residents">        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importFile} className="hidden" data-testid="import-file-input" />
         <Button data-testid="import-residents-btn" variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-1.5 h-4 w-4" />Import Excel</Button>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -102,8 +102,8 @@ export default function Residents() {
       {loading ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : (residents || []).length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-sm text-zinc-400"><Users className="mx-auto mb-3 h-8 w-8 text-zinc-300" />No residents yet.</div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="border-b border-border bg-secondary/50 text-left text-[11px] uppercase tracking-wider text-zinc-500">
               <tr><th className="px-5 py-3 font-medium">Name</th><th className="px-5 py-3 font-medium">Flat</th><th className="px-5 py-3 font-medium">Tower</th><th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium">Phone</th><th className="px-5 py-3"></th></tr>
             </thead>

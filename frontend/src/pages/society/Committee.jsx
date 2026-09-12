@@ -35,7 +35,7 @@ export default function Committee() {
   const roleColor = (r) => ROLE_COLOR[r] || ["#f1f5f9", "#475569", "#e2e8f0"];
 
   return (
-    <div className="p-8" data-testid="committee-page">
+    <div className="p-4 sm:p-6 lg:p-8" data-testid="committee-page">
       <PageHeader title="Society Committee" subtitle="Managing Committee">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button data-testid="add-committee-btn"><Plus className="mr-1.5 h-4 w-4" />Add Member</Button></DialogTrigger>

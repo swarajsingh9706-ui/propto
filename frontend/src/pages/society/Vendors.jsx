@@ -42,7 +42,7 @@ export default function Vendors() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Vendor Management" subtitle="Vendors">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button data-testid="add-vendor-btn"><Plus className="mr-1.5 h-4 w-4" />Add Vendor</Button></DialogTrigger>

@@ -5,11 +5,11 @@ export function TopHeader({ greeting, subtitle }) {
   return (
     <div
       data-testid="dash-topheader"
-      className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white px-7 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+      className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-white px-4 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] sm:px-7"
     >
       <div>
-        <div className="text-[19px] font-extrabold text-slate-900">{greeting}</div>
-        <div className="mt-0.5 text-[13px] text-slate-400">{subtitle}</div>
+        <div className="text-[17px] font-extrabold text-slate-900 sm:text-[19px]">{greeting}</div>
+        <div className="mt-0.5 text-[12px] text-slate-400 sm:text-[13px]">{subtitle}</div>
       </div>
       <div className="flex items-center gap-2.5">
         <div className="hidden items-center gap-2 rounded-[9px] border border-border bg-slate-50 px-3.5 py-2 text-[13px] text-slate-500 sm:flex">

@@ -39,7 +39,7 @@ export default function Dashboard() {
     <div className="flex min-h-screen flex-col">
       <TopHeader greeting={`Good day, ${firstName}!`} subtitle="Here's what's happening at your society" />
 
-      <div className="flex gap-5 px-6 py-5">
+      <div className="flex flex-col gap-5 px-4 py-5 sm:px-6 xl:flex-row">
         {/* MAIN COLUMN */}
         <div className="min-w-0 flex-1">
           <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
@@ -61,7 +61,8 @@ export default function Dashboard() {
             {escalated.length === 0 ? (
               <EmptyRow text="No escalated tickets — everything is under control." />
             ) : (
-              <>
+              <div className="overflow-x-auto">
+                <div className="min-w-[640px]">
                 <RowHead cols="90px 1.4fr 0.8fr 1fr 1.4fr 120px" items={["TICKET ID", "ISSUE", "UNIT", "RESIDENT", "SLA", "ACTION"]} />
                 {escalated.map((t, i) => (
                   <div key={t.id} className="grid items-center gap-2 border-b border-border px-[18px] py-3 last:border-0"
@@ -77,7 +78,8 @@ export default function Dashboard() {
                     </button>
                   </div>
                 ))}
-              </>
+                </div>
+              </div>
             )}
           </Panel>
 
@@ -86,7 +88,8 @@ export default function Dashboard() {
             {recent.length === 0 ? (
               <EmptyRow text="No tickets yet." />
             ) : (
-              <>
+              <div className="overflow-x-auto">
+                <div className="min-w-[640px]">
                 <RowHead cols="90px 1fr 0.8fr 0.9fr 0.9fr 1fr" items={["ID", "ISSUE", "UNIT", "STATUS", "PRIORITY", "ASSIGNED TO"]} />
                 {recent.map((t, i) => (
                   <div key={t.id} className="grid items-center gap-2.5 border-b border-border px-[18px] py-3 last:border-0"
@@ -99,7 +102,8 @@ export default function Dashboard() {
                     <div className="truncate text-[12px] text-slate-500">{t.vendor_name || "Unassigned"}</div>
                   </div>
                 ))}
-              </>
+                </div>
+              </div>
             )}
           </Panel>
 
@@ -110,7 +114,7 @@ export default function Dashboard() {
         </div>
 
         {/* RIGHT RAIL */}
-        <div className="hidden w-[300px] flex-shrink-0 flex-col gap-3.5 xl:flex">
+        <div className="flex w-full flex-shrink-0 flex-col gap-3.5 xl:w-[300px]">
           <Panel testid="panel-alerts" title="Alerts"
             action={<button onClick={() => navigate("/tickets")} className="text-[12px] font-bold text-brand">View all</button>}>
             {escalated.length === 0 ? (

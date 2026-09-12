@@ -229,3 +229,11 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 6. Suggestions: each card shows exact date & time (created_at).
 7. Taxonomy: replaced with Propto_Updated_Taxonomy (3).xlsx -> rebuilt data/taxonomy.json = 16,157 items (4,736 vendor-routed / 11,421 in-house). situations_kb._XLSX updated to new URL. Backend restarted to reload cache. Match verified (electricity/leakage score 1.0).
 - Verified: testing agent iteration_8.json — 100% (7/7 frontend, backend 6 passed/1 skipped). No tenant in seed data so Tenant filter shows empty (not a bug).
+
+## Mobile/tablet responsiveness (2026-06)
+- Root cause: sidebar was `fixed w-60` with `main ml-60` (always-on), pushing content off-screen on mobile with no way to reach the nav.
+- `components/Layout.jsx`: sidebar is now a slide-in drawer (`-translate-x-full` on mobile, `lg:translate-x-0`) with overlay + close (X); added a `lg:hidden` sticky top bar with hamburger (data-testid=sidebar-toggle) + logo; main is `lg:ml-60` (no left margin on mobile); NavLink closes drawer on tap. PageHeader title now `text-2xl sm:text-3xl` and actions wrap.
+- `components/DashKit.jsx` TopHeader: responsive padding (`px-4 sm:px-7`), wraps, smaller text on mobile.
+- Dashboard & SuperDashboard: main container `flex-col ... xl:flex-row`, right rail now `w-full ... xl:w-[300px]` (was hidden), fixed-grid tables wrapped in `overflow-x-auto` + min-width so they scroll instead of clipping.
+- Table pages (Tickets/Residents/Reports): wrappers changed `overflow-hidden`->`overflow-x-auto` with table `min-w-[...]`; page containers `p-8`->`p-4 sm:p-6 lg:p-8` across all society + super pages.
+- Verified via screenshots at 390px (mobile) and 768px (tablet): drawer toggle, nav, stacking, and table scroll all work. Login page was already responsive (unchanged).

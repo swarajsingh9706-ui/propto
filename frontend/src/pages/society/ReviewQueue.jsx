@@ -37,7 +37,7 @@ export default function ReviewQueue() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Human Review Queue" subtitle="HITL · Low Confidence" />
       {loading ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : (items || []).length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-sm text-zinc-400"><ClipboardCheck className="mx-auto mb-3 h-8 w-8 text-zinc-300" />Queue is clear — no low-confidence messages pending review.</div>
