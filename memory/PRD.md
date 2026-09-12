@@ -237,3 +237,5 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Dashboard & SuperDashboard: main container `flex-col ... xl:flex-row`, right rail now `w-full ... xl:w-[300px]` (was hidden), fixed-grid tables wrapped in `overflow-x-auto` + min-width so they scroll instead of clipping.
 - Table pages (Tickets/Residents/Reports): wrappers changed `overflow-hidden`->`overflow-x-auto` with table `min-w-[...]`; page containers `p-8`->`p-4 sm:p-6 lg:p-8` across all society + super pages.
 - Verified via screenshots at 390px (mobile) and 768px (tablet): drawer toggle, nav, stacking, and table scroll all work. Login page was already responsive (unchanged).
+
+- 2026-06: Taxonomy re-updated with newly uploaded Propto_Updated_Taxonomy (3).xlsx (16,157 items; 4,736 vendor-routed / 11,421 in-house). situations_kb._XLSX URL updated, cache rebuilt, backend restarted. Match verified.
