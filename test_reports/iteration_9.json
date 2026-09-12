@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only testing of Residents self-registration flow (PROPTO). Verified: form-link banner + copy, tab switching with counts, public /join/<token> page loads society info & form, submission creates Pending resident with 'Via Form' badge, Accept moves resident to Active with correct toast ('invite could not be sent — WhatsApp not connected'), Reject removes resident from both tabs, Add Resident dialog works, search + Owner/Tenant filters work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Add Resident dialog", "issues": ["Console warning: Missing `Description` or `aria-describedby` for DialogContent (a11y minor)."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Residents.jsx: approve/reject use raw api.delete/api.post without passing cfg (society scope); works because backend infers scope from JWT for society admin, but inconsistent with other calls that pass cfg — consider passing cfg for parity/multi-society safety.",
+    "DialogContent missing aria-describedby (a11y warning) — add DialogDescription to Add Resident and other dialogs."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "admin@greenvalley.com / Admin@123",
+  "seed_data_creation": "Created test residents via public form (TEST_Rider_*, TEST_Reject_*) and Add dialog (TEST_Added_*). Reject test deleted its record; accept & add records remain in Active for society Green Valley.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All flows in the review request passed end-to-end on https://complaint-whatsapp.preview.emergentagent.com. Form URL pattern: /join/<token>. Accept shows the exact expected toast when WhatsApp is not connected. No blocking bugs."
+}

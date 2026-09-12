@@ -200,6 +200,27 @@ async def get_poll_results(message_id: str) -> dict:
         return {}
 
 
+async def get_group_invite_link(group_id: str) -> str:
+    """Fetch (or generate) the WhatsApp group invite link for a configured group.
+    Returns '' if Whapi is not configured or the call fails (never raises)."""
+    if not whapi_configured() or not group_id:
+        return ""
+    gid = group_id if group_id.endswith("@g.us") else f"{group_id}@g.us"
+    headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(f"{whapi_base()}/groups/{gid}/invite", headers=headers)
+            r.raise_for_status()
+            data = r.json()
+    except Exception as e:
+        logger.warning("get_group_invite_link failed for %s: %s", group_id, e)
+        return ""
+    code = data.get("invite_code") or data.get("code") or data.get("invite") or ""
+    if not code:
+        return ""
+    return str(code) if str(code).startswith("http") else f"https://chat.whatsapp.com/{code}"
+
+
 # ---------------- Inbound parsers ----------------
 def parse_meta_inbound(payload: dict):
     out = []

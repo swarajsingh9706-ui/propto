@@ -239,3 +239,12 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Verified via screenshots at 390px (mobile) and 768px (tablet): drawer toggle, nav, stacking, and table scroll all work. Login page was already responsive (unchanged).
 
 - 2026-06: Taxonomy re-updated with newly uploaded Propto_Updated_Taxonomy (3).xlsx (16,157 items; 4,736 vendor-routed / 11,421 in-house). situations_kb._XLSX URL updated, cache rebuilt, backend restarted. Match verified.
+
+## Resident self-registration form + approval workflow (2026-06)
+- Public form: new route /join/{token} (frontend `pages/public/Join.jsx`, outside auth) with the same fields as Add Resident (name, phone, flat, tower, Owner/Tenant). Backend `routers/public_router.py`: GET /api/public/join/{token} (society info), POST (creates resident approval=pending, source=form).
+- Per-society token: society doc gains `form_token`; GET /api/society/form-link generates/returns it. Residents page shows a shareable link banner (`${origin}/join/{token}`) with Copy.
+- Residents page now has two tabs: Active Residents (approval!=pending → approved/manual/import) and Pending Residents (form submissions), with counts + 'Via Form'/'Imported'/'Added' source badges.
+- Pending rows: Accept → POST /api/society/residents/{id}/approve (sets approval=active, fetches Whapi group invite link via whatsapp_client.get_group_invite_link and sends it to the resident's phone; best-effort). Reject → DELETE (removes record).
+- whatsapp_client.get_group_invite_link(group_id): GET /groups/{id}/invite -> https://chat.whatsapp.com/{invite_code}; returns '' if Whapi/group not configured.
+- create_resident/import now set approval=active + source. Legacy residents (no approval) treated as Active.
+- Verified: backend e2e via curl (form-link→public GET/POST→pending→approve, invite skipped as Whapi not connected in preview); frontend testing agent iteration_9 = 100%, no bugs. NOTE: Emergent external gateway takes ~30-60s to route brand-new API paths after adding them.

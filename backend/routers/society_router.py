@@ -9,6 +9,7 @@ from models import (VendorCreate, VendorUpdate, ResidentCreate, ResidentUpdate,
 from auth_utils import require_society_admin, user_society_id
 import pipeline
 import audit
+import whatsapp_client as wa
 
 router = APIRouter(prefix="/api/society", tags=["society_admin"])
 
@@ -126,7 +127,7 @@ async def list_residents(society_id: str = None, user: dict = Depends(require_so
 async def create_resident(body: ResidentCreate, society_id: str = None, user: dict = Depends(require_society_admin)):
     sid = society_id or _sid(user)
     doc = body.model_dump()
-    doc.update({"society_id": sid, "created_at": now_iso()})
+    doc.update({"society_id": sid, "created_at": now_iso(), "approval": "active", "source": "manual"})
     res = await db.residents.insert_one(doc)
     doc["_id"] = res.inserted_id
     await audit.log(sid, "resident_added", f"Resident {doc.get('name')} ({doc.get('flat') or '—'}) added as {doc.get('status') or 'Owner'}", actor=_actor(user), category="resident")
@@ -174,10 +175,54 @@ async def import_residents(file: UploadFile = File(...), society_id: str = None,
             "flat": str(row.get("flat", "")).strip().replace(".0", ""),
             "tower": str(row.get("tower", "")).strip(),
             "status": (str(row.get("status", "")).strip().title() or "Owner") if str(row.get("status", "")).strip().lower() in ("owner", "tenant") else "Owner",
-            "society_id": sid, "created_at": now_iso(),
+            "society_id": sid, "created_at": now_iso(), "approval": "active", "source": "import",
         })
         inserted += 1
     return {"inserted": inserted}
+
+
+@router.get("/form-link")
+async def resident_form_link(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    soc = await db.societies.find_one({"_id": ObjectId(sid)})
+    if not soc:
+        raise HTTPException(status_code=404, detail="Society not found")
+    token = soc.get("form_token")
+    if not token:
+        import secrets
+        token = secrets.token_urlsafe(9)
+        await db.societies.update_one({"_id": ObjectId(sid)}, {"$set": {"form_token": token}})
+    return {"token": token, "path": f"/join/{token}"}
+
+
+@router.post("/residents/{resident_id}/approve")
+async def approve_resident(resident_id: str, user: dict = Depends(require_society_admin)):
+    r = await db.residents.find_one({"_id": ObjectId(resident_id)})
+    if not r:
+        raise HTTPException(status_code=404, detail="Resident not found")
+    await db.residents.update_one({"_id": ObjectId(resident_id)}, {"$set": {"approval": "active"}})
+    sid = r.get("society_id")
+    invite = {"sent": False, "link": ""}
+    try:
+        soc = await db.societies.find_one({"_id": ObjectId(sid)}) if sid else None
+        grp = (soc or {}).get("whatsapp_group") or {}
+        gid = grp.get("group_id") or grp.get("chat_id")
+        link = await wa.get_group_invite_link(gid) if gid else ""
+        if link and r.get("phone"):
+            msg = (f"Hi {r.get('name') or 'Resident'}, your request to join "
+                   f"{(soc or {}).get('name') or 'the society'} has been approved! "
+                   f"Tap to join our WhatsApp group: {link}")
+            resp = await wa.send_text(r["phone"], msg)
+            invite = {"sent": not (isinstance(resp, dict) and resp.get("error")), "link": link}
+    except Exception as e:
+        import logging
+        logging.getLogger("propto").warning("approve invite send failed: %s", e)
+    await audit.log(sid, "resident_approved",
+                    f"Resident {r.get('name')} ({r.get('flat') or '—'}) approved"
+                    + (" & group invite sent" if invite["sent"] else ""),
+                    actor=_actor(user), category="resident")
+    r["approval"] = "active"
+    return {"status": "approved", "invite": invite, "resident": _clean(r)}
 
 
 # ---------------- Tickets ----------------
