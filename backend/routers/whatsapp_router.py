@@ -230,35 +230,54 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
 # -------- Whapi Webhook (public) — reads real WhatsApp GROUP chats --------
 # -------- Whapi Webhook (public) --------
 @router.get("/api/whapi/webhook")
+@router.get("/api/whapi/webhook/read")
+@router.get("/api/whapi/webhook/send")
 async def whapi_webhook_check():
     # Lets you confirm the route is live by opening the URL in a browser.
     return {"status": "ok", "detail": "PROPTO Whapi webhook is live. Whapi will POST here."}
 
 
-@router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
-async def whapi_webhook(request: Request):
+async def _whapi_ingest(request: Request, role: str):
     # Return 200 fast. With Redis set -> enqueue for the worker; else process inline.
     try:
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
     if task_queue.redis_enabled():
-        await task_queue.enqueue({"kind": "whapi", "payload": payload, "method": request.method})
+        await task_queue.enqueue({"kind": "whapi", "payload": payload, "method": request.method, "role": role})
     else:
         try:
-            await asyncio.wait_for(process_whapi(payload, request.method), timeout=45)
+            await asyncio.wait_for(process_whapi(payload, request.method, role), timeout=45)
         except asyncio.TimeoutError:
             logger.warning("Whapi webhook processing exceeded 45s cap; returning 200")
     return {"status": "ok"}
 
 
-async def process_whapi(payload: dict, method: str = "POST"):
+@router.api_route("/api/whapi/webhook", methods=["POST", "PUT", "PATCH"])
+@router.api_route("/api/whapi/webhook/read", methods=["POST", "PUT", "PATCH"])
+async def whapi_webhook_read(request: Request):
+    # READER account: incoming GROUP messages -> AI/ticket pipeline.
+    # Group->society assignment is matched against this reader number.
+    return await _whapi_ingest(request, "read")
+
+
+@router.api_route("/api/whapi/webhook/send", methods=["POST", "PUT", "PATCH"])
+async def whapi_webhook_send(request: Request):
+    # SENDER account: poll votes + 1:1 vendor/resident replies (those chats were
+    # started by the sender, so replies come back to the sending number).
+    return await _whapi_ingest(request, "send")
+
+
+async def process_whapi(payload: dict, method: str = "POST", role: str = "read"):
     try:
-        logger.info("Whapi RAW [%s]: %s", method, json.dumps(payload)[:2500])
+        logger.info("Whapi RAW [%s/%s]: %s", method, role, json.dumps(payload)[:2500])
         messages = wa.parse_whapi_inbound(payload)
-        logger.info("Whapi parsed %d msg(s): %s", len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
+        logger.info("Whapi[%s] parsed %d msg(s): %s", role, len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
         for m in messages:
             if m.get("type") == "poll" or m.get("poll"):
+                # Polls are owned by the SENDER account -> only its webhook handles votes.
+                if role == "read":
+                    continue
                 if m.get("poll_fetch_id") and not (m.get("poll") or {}).get("results"):
                     fetched = await wa.get_poll_results(m["poll_fetch_id"])
                     if fetched:
@@ -267,6 +286,11 @@ async def process_whapi(payload: dict, method: str = "POST"):
                 await _apply_poll_results(m)
                 continue
             group_chat_id = m.get("group_chat_id")
+            # Role routing: reader handles group chatter; sender handles DMs/buttons.
+            if role == "read" and not group_chat_id:
+                continue
+            if role == "send" and group_chat_id and m.get("text") and not m.get("button_id"):
+                continue
             society = None
             if group_chat_id:
                 society = await db.societies.find_one({"whatsapp_group.chat_id": group_chat_id})

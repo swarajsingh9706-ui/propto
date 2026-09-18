@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Loader2, MessageSquare, Send, Wifi, WifiOff, CheckCircle2, XCircle, Bot, RefreshCw } from "lucide-react";
 
-const WHAPI_WEBHOOK = `${process.env.REACT_APP_BACKEND_URL}/api/whapi/webhook`;
+const WHAPI_WEBHOOK_READ = `${process.env.REACT_APP_BACKEND_URL}/api/whapi/webhook/read`;
+const WHAPI_WEBHOOK_SEND = `${process.env.REACT_APP_BACKEND_URL}/api/whapi/webhook/send`;
 
 const SAMPLES = [
   "Water is leaking heavily from the ceiling in flat B302, please send a plumber",
@@ -158,9 +159,16 @@ export default function WhatsApp({ societyId = null, embedded = false }) {
                   : "Add WHAPI_TOKEN (group reading) or Meta keys to backend .env. Simulator works regardless."}
               </p>
               {status.whapi_configured && (
-                <div className="mt-2 rounded-md bg-white/60 p-2">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Whapi webhook URL</p>
-                  <code className="block break-all text-[11px] text-zinc-700">{WHAPI_WEBHOOK}</code>
+                <div className="mt-2 space-y-2 rounded-md bg-white/60 p-2">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-400">Reader account webhook URL (incoming group messages)</p>
+                    <code data-testid="whapi-webhook-read" className="block break-all text-[11px] text-zinc-700">{WHAPI_WEBHOOK_READ}</code>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-400">Sender account webhook URL (poll votes &amp; vendor/resident replies)</p>
+                    <code data-testid="whapi-webhook-send" className="block break-all text-[11px] text-zinc-700">{WHAPI_WEBHOOK_SEND}</code>
+                  </div>
+                  <p className="text-[10px] text-zinc-400">Set the reader URL in your reading Whapi channel and the sender URL in your sending Whapi channel. Group monitoring is linked to the reader account.</p>
                 </div>
               )}
               {status.api_configured && (

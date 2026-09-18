@@ -248,3 +248,16 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - whatsapp_client.get_group_invite_link(group_id): GET /groups/{id}/invite -> https://chat.whatsapp.com/{invite_code}; returns '' if Whapi/group not configured.
 - create_resident/import now set approval=active + source. Legacy residents (no approval) treated as Active.
 - Verified: backend e2e via curl (form-link→public GET/POST→pending→approve, invite skipped as Whapi not connected in preview); frontend testing agent iteration_9 = 100%, no bugs. NOTE: Emergent external gateway takes ~30-60s to route brand-new API paths after adding them.
+
+## Two Whapi accounts: split read vs send + dual webhooks (2026-06)
+- User has 2 Whapi accounts: one to READ group messages, one to SEND. Group→society assignment linked to the reader.
+- Env: WHAPI_TOKEN_READ (monitoring account), WHAPI_TOKEN_SEND (sending account); both fall back to legacy WHAPI_TOKEN. WHAPI_BASE shared. Added to backend/.env.vps template.
+- whatsapp_client.py: added _read_token()/_send_token(); whapi_configured(role). Sending (send_text/send_buttons/send_poll, _whapi_post default) uses SEND token. Reading (list_groups, get_group_invite_link, check_connection) uses READ token. get_poll_results uses SEND token (poll owned by sender).
+- whatsapp_router.py: three routes — /api/whapi/webhook/read, /api/whapi/webhook/send, and legacy /api/whapi/webhook (alias of read). process_whapi(payload, method, role) role-gates: read handles only group text -> pipeline (+society match); send handles poll votes + 1:1 vendor/resident replies + buttons; each ignores the other's events. worker.py passes job role.
+- Frontend WhatsApp.jsx shows both reader & sender webhook URLs (data-testid whapi-webhook-read / whapi-webhook-send).
+- Verified via curl + logs: read webhook ran group pipeline path; send webhook ignored group chatter; token role resolution OK. VPS: set WHAPI_TOKEN_READ + WHAPI_TOKEN_SEND, point reader Whapi channel to /read and sender channel to /send, restart API + worker.
+
+## Complaint acknowledgements -> personal chat (2026-06)
+- Change: for group-originated messages, the ticket acknowledgement / duplicate notice / low-confidence "team will review" reply are now sent to the complainant's PERSONAL chat (their phone) instead of into the group, for a cleaner group.
+- `pipeline.py` process_message: replaced group `reply_target`/`quote` with `ack_target = phone`; create_ticket called with notify_to=phone, notify_reply_to=None; duplicate + low-confidence replies DM the person. Vendor job messages unchanged.
+- Verified via /api/whapi/webhook/read with a mapped group: log shows send_text target = personal number (919812345678), not the group chat_id (delivery best-effort; failed only because preview Whapi token is a placeholder).

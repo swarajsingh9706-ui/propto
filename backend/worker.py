@@ -30,7 +30,7 @@ logger = logging.getLogger("propto.worker")
 async def handle(job: dict):
     kind = job.get("kind")
     if kind == "whapi":
-        await process_whapi(job.get("payload") or {}, job.get("method", "POST"))
+        await process_whapi(job.get("payload") or {}, job.get("method", "POST"), job.get("role", "read"))
     elif kind == "meta":
         await process_meta(job.get("payload") or {})
     else:

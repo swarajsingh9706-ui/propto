@@ -14,8 +14,22 @@ def whapi_base() -> str:
     return os.environ.get("WHAPI_BASE", "https://gate.whapi.cloud").rstrip("/")
 
 
-def whapi_configured() -> bool:
-    return bool(os.environ.get("WHAPI_TOKEN"))
+def _read_token() -> str:
+    """Token for the account that READS the group (monitoring). Falls back to WHAPI_TOKEN."""
+    return os.environ.get("WHAPI_TOKEN_READ") or os.environ.get("WHAPI_TOKEN") or ""
+
+
+def _send_token() -> str:
+    """Token for the account that SENDS replies/polls/invites. Falls back to WHAPI_TOKEN."""
+    return os.environ.get("WHAPI_TOKEN_SEND") or os.environ.get("WHAPI_TOKEN") or ""
+
+
+def whapi_configured(role: str = "any") -> bool:
+    if role == "read":
+        return bool(_read_token())
+    if role == "send":
+        return bool(_send_token())
+    return bool(_read_token() or _send_token())
 
 
 def is_configured() -> bool:
@@ -45,8 +59,8 @@ def strip_jid(jid: str) -> str:
 
 
 # ---------------- Outbound (Whapi preferred, Meta fallback, else simulated) ----------------
-async def _whapi_post(path: str, payload: dict) -> dict:
-    headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}", "Content-Type": "application/json"}
+async def _whapi_post(path: str, payload: dict, token: str = None) -> dict:
+    headers = {"Authorization": f"Bearer {token or _send_token()}", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=8) as c:
         r = await c.post(f"{whapi_base()}{path}", headers=headers, json=payload)
         r.raise_for_status()
@@ -65,7 +79,7 @@ async def _meta_post(payload: dict) -> dict:
 async def send_poll(to: str, title: str, options: list, count: int = 1) -> dict:
     """Send a native WhatsApp poll. Best-effort; never raises."""
     try:
-        if whapi_configured():
+        if whapi_configured("send"):
             return await _whapi_post("/messages/poll", {"to": to, "title": title, "options": options, "count": count})
         if meta_configured():
             return await send_buttons(to, title, [{"id": "poll_" + o.lower(), "title": o} for o in options[:3]])
@@ -92,7 +106,7 @@ def poll_message_id_from(resp) -> str:
 
 async def send_text(to: str, text: str, reply_to: str = None) -> dict:
     try:
-        if whapi_configured():
+        if whapi_configured("send"):
             payload = {"to": to, "body": text}
             if reply_to:
                 payload["quoted"] = reply_to
@@ -112,7 +126,7 @@ async def send_text(to: str, text: str, reply_to: str = None) -> dict:
 async def send_buttons(to: str, body: str, buttons: list) -> dict:
     """buttons: list of {'id': str, 'title': str} (max 3). Best-effort; never raises."""
     try:
-        if whapi_configured():
+        if whapi_configured("send"):
             try:
                 return await _whapi_post("/messages/interactive", {
                     "to": to, "type": "button", "body": {"text": body},
@@ -137,8 +151,8 @@ async def send_buttons(to: str, body: str, buttons: list) -> dict:
 
 # ---------------- Connection checks ----------------
 async def check_connection() -> dict:
-    if whapi_configured():
-        headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}"}
+    if whapi_configured("read"):
+        headers = {"Authorization": f"Bearer {_read_token()}"}
         async with httpx.AsyncClient(timeout=20) as c:
             r = await c.get(f"{whapi_base()}/health", headers=headers)
             if r.status_code == 200:
@@ -160,9 +174,9 @@ async def check_connection() -> dict:
 async def list_groups() -> list:
     """List the linked Whapi number's WhatsApp groups so the admin can pick the
     exact group (guarantees the stored chat_id matches inbound webhooks)."""
-    if not whapi_configured():
+    if not whapi_configured("read"):
         return []
-    headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}"}
+    headers = {"Authorization": f"Bearer {_read_token()}"}
     async with httpx.AsyncClient(timeout=20) as c:
         r = await c.get(f"{whapi_base()}/groups", headers=headers, params={"count": 200})
         r.raise_for_status()
@@ -185,9 +199,9 @@ async def list_groups() -> list:
 async def get_poll_results(message_id: str) -> dict:
     """Fetch the authoritative poll state (title + results with counts) for a poll
     message id. Used to tally votes even when only messages.post is enabled."""
-    if not whapi_configured() or not message_id:
+    if not whapi_configured("send") or not message_id:
         return {}
-    headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}"}
+    headers = {"Authorization": f"Bearer {_send_token()}"}
     try:
         async with httpx.AsyncClient(timeout=20) as c:
             r = await c.get(f"{whapi_base()}/messages/{message_id}", headers=headers)
@@ -203,10 +217,10 @@ async def get_poll_results(message_id: str) -> dict:
 async def get_group_invite_link(group_id: str) -> str:
     """Fetch (or generate) the WhatsApp group invite link for a configured group.
     Returns '' if Whapi is not configured or the call fails (never raises)."""
-    if not whapi_configured() or not group_id:
+    if not whapi_configured("read") or not group_id:
         return ""
     gid = group_id if group_id.endswith("@g.us") else f"{group_id}@g.us"
-    headers = {"Authorization": f"Bearer {os.environ['WHAPI_TOKEN']}"}
+    headers = {"Authorization": f"Bearer {_read_token()}"}
     try:
         async with httpx.AsyncClient(timeout=15) as c:
             r = await c.get(f"{whapi_base()}/groups/{gid}/invite", headers=headers)

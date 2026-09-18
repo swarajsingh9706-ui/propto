@@ -202,10 +202,11 @@ async def log_activity(society_id: str, phone: str, text: str, decision: str, ai
 
 async def process_message(society_id: str, phone: str, text: str, group_chat_id: str = None, reply_to: str = None):
     """Main pipeline: rule filter -> AI -> confidence workflow. Returns result dict.
-    When group_chat_id is set, all resident-facing replies go to the group (quoting the original message)."""
+    Acknowledgements/confirmations for group messages are sent to the complainant's
+    PERSONAL chat (not the group) to keep the group clean."""
     in_group = bool(group_chat_id)
-    reply_target = group_chat_id if in_group else phone
-    quote = reply_to if in_group else None
+    # All resident-facing acknowledgements go to the person's personal chat (their phone).
+    ack_target = phone
 
     rule = ai_engine.prefilter(text)
     if not rule["forward"]:
@@ -238,12 +239,12 @@ async def process_message(society_id: str, phone: str, text: str, group_chat_id:
             )
             await add_timeline(str(dup["_id"]), "Duplicate Linked", f"Another report from {phone}")
             await log_activity(society_id, phone, text, "duplicate", ai=ai, reason="Open ticket exists", ticket_number=dup["ticket_number"])
-            if reply_target:
-                await wa.send_text(reply_target, f"This is already tracked under ticket {dup['ticket_number']}. We'll keep you posted.", reply_to=quote)
+            if ack_target:
+                await wa.send_text(ack_target, f"This is already tracked under ticket {dup['ticket_number']}. We'll keep you posted.")
             return {"status": "duplicate", "ticket_number": dup["ticket_number"], "ai": ai}
 
         ticket = await create_ticket(society_id, ai, resident, "whatsapp", text, ai_generated=True,
-                                     notify_to=reply_target, notify_reply_to=quote)
+                                     notify_to=ack_target, notify_reply_to=None)
         await log_activity(society_id, phone, text, "ticket_created", ai=ai, ticket_number=ticket["ticket_number"])
         return {"status": "ticket_created", "ticket_number": ticket["ticket_number"], "ai": ai}
 
@@ -261,12 +262,12 @@ async def process_message(society_id: str, phone: str, text: str, group_chat_id:
     await db.review_queue.insert_one(review)
     await log_activity(society_id, phone, text, "review_queue", ai=ai, reason=f"Low confidence {conf:.2f}")
     if in_group:
-        await wa.send_text(
-            reply_target,
-            f"Thanks — this looks like it may be a {ai.get('category') or 'maintenance'} complaint"
-            + (f" at Flat {ai.get('flat')}" if ai.get('flat') else "") + ". Our team will review and confirm shortly.",
-            reply_to=quote,
-        )
+        if phone:
+            await wa.send_text(
+                phone,
+                f"Thanks — this looks like it may be a {ai.get('category') or 'maintenance'} complaint"
+                + (f" at Flat {ai.get('flat')}" if ai.get('flat') else "") + ". Our team will review and confirm shortly.",
+            )
     elif phone:
         await wa.send_buttons(
             phone,
