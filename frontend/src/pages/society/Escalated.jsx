@@ -1,54 +1,249 @@
-import { useNavigate } from "react-router-dom";
-import { useFetch } from "@/lib/useScope";
+import { useEffect, useState } from "react";
+import api, { apiError } from "@/lib/api";
+import { useScope } from "@/lib/useScope";
 import { PageHeader } from "@/components/Layout";
-import { Panel, SLABar } from "@/components/DashKit";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { StatusBadge, PriorityBadge } from "@/components/Badges";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { toast } from "sonner";
+import { Search, Loader2, Bot, CheckCircle2, UserPlus, Clock, Flame, AlertTriangle } from "lucide-react";
 
-function slaHours(t) {
-  if (!t.sla_due || !t.created_at) return null;
-  const h = (new Date(t.sla_due).getTime() - new Date(t.created_at).getTime()) / 3600000;
-  return h > 0 ? Math.round(h) : null;
-}
+const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control"];
+
+const fmtDT = (s) => {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (isNaN(d)) return "—";
+  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+};
+
+const reasonFor = (t) => t.escalation_reason || (t.status === "Escalated" ? "AI routing exhausted" : "SLA breached");
+
+const FilterPill = ({ active, onClick, children, testid }) => (
+  <button type="button" data-testid={testid} onClick={onClick}
+    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+      active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-zinc-600 hover:bg-secondary"}`}>
+    {children}
+  </button>
+);
 
 export default function Escalated() {
-  const navigate = useNavigate();
-  const { data, loading } = useFetch("/society/tickets/escalated");
-  const rows = data || [];
+  const cfg = useScope();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [priority, setPriority] = useState("all");
+  const [selected, setSelected] = useState(null);
+  const [vendors, setVendors] = useState([]);
+  const [pendingVendor, setPendingVendor] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get("/society/tickets/escalated", cfg);
+      setRows(data);
+    } catch (e) { toast.error(apiError(e)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { api.get("/society/vendors", cfg).then((r) => setVendors(r.data)).catch(() => {}); /* eslint-disable-next-line */ }, []);
+
+  const openTicket = async (t) => {
+    const { data } = await api.get(`/society/tickets/${t.id}`);
+    setSelected(data);
+    setPendingVendor(data.vendor_id || "");
+  };
+  const assign = async (vendorId) => {
+    try {
+      const { data } = await api.post(`/society/tickets/${selected.id}/assign`, { vendor_id: vendorId });
+      setSelected(data); load(); toast.success("Vendor assigned");
+    } catch (e) { toast.error(apiError(e)); }
+  };
+  const setStatusVal = async (val) => {
+    try {
+      const { data } = await api.put(`/society/tickets/${selected.id}`, { status: val });
+      setSelected(data); load(); toast.success(`Marked ${val}`);
+    } catch (e) { toast.error(apiError(e)); }
+  };
+  const close = async () => {
+    try {
+      const { data } = await api.post(`/society/tickets/${selected.id}/close`);
+      setSelected(data); load(); toast.success("Ticket resolved");
+    } catch (e) { toast.error(apiError(e)); }
+  };
+
+  const filtered = rows.filter((t) => {
+    if (priority === "High" && t.priority !== "High") return false;
+    if (category !== "all" && t.category !== category) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return [t.ticket_number, t.flat, t.tower, t.resident_name, t.category, t.vendor_name].some((x) => (x || "").toLowerCase().includes(s));
+    }
+    return true;
+  });
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="escalated-page">
-      <PageHeader title="Escalated Tickets" subtitle="Needs Manual Action" />
-      <Panel
-        danger
-        testid="escalated-panel"
-        title={
-          <span className="flex items-center gap-2 text-red-600">
-            <AlertTriangle className="h-4 w-4" />
-            <span>
-              <span className="block text-[14px] font-extrabold">Escalated Tickets</span>
-              <span className="block text-[11px] font-normal text-slate-500">Require manual assignment — AI routing exhausted or SLA breached</span>
-            </span>
-          </span>
-        }
-        action={<span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-600" data-testid="escalated-count">{rows.length} pending</span>}
-      >
-        <div className="grid grid-cols-[90px_1.2fr_0.8fr_1fr_1.4fr_1.3fr_120px] gap-2 border-b border-border bg-slate-50 px-[18px] py-2">
-          {["TICKET ID", "ISSUE", "UNIT", "RESIDENT", "REASON", "SLA", "ACTION"].map((h) => <div key={h} className="text-[9px] font-extrabold uppercase tracking-wide text-slate-400">{h}</div>)}
+      <PageHeader title="Escalated Tickets" subtitle="Needs Manual Action">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-600" data-testid="escalated-count">
+          <AlertTriangle className="h-3.5 w-3.5" />{rows.length} pending
+        </span>
+      </PageHeader>
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Input data-testid="escalated-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ticket, flat, resident, vendor…" className="pl-9" />
         </div>
-        {loading ? <div className="p-6"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div> :
-          rows.length === 0 ? <div className="p-10 text-center text-sm text-slate-400"><AlertTriangle className="mx-auto mb-2 h-8 w-8 text-slate-300" />No escalated tickets. Everything is on track.</div> :
-            rows.map((t, i) => (
-              <div key={t.id} data-testid={`escalated-row-${t.id}`} className="grid grid-cols-[90px_1.2fr_0.8fr_1fr_1.4fr_1.3fr_120px] items-center gap-2 border-b border-border px-[18px] py-3" style={{ background: i % 2 ? "#f8fafc" : "#fff", borderLeft: "3px solid #dc2626" }}>
-                <div className="text-[12px] font-extrabold text-red-600">{t.ticket_number || t.id?.slice(-6)}</div>
-                <div className="text-[13px] font-semibold text-slate-900">{t.title || t.category || "Issue"}</div>
-                <div className="text-[12px] text-slate-500">{t.flat || t.unit || t.tower || "—"}</div>
-                <div className="text-[12px] text-slate-500">{t.reporter_name || t.resident_name || "Resident"}</div>
-                <div className="text-[11px] font-semibold text-amber-600">{t.escalation_reason || (t.status === "Escalated" ? "AI routing exhausted" : "SLA breached")}</div>
-                <SLABar createdAt={t.created_at} slaHours={slaHours(t)} />
-                <button data-testid={`assign-${t.id}`} onClick={() => navigate("/tickets")} className="whitespace-nowrap rounded-[7px] bg-brand px-3 py-1.5 text-[11px] font-bold text-white hover:opacity-90">Assign Now →</button>
-              </div>
+        <Button data-testid="escalated-filter-priority-high" type="button" variant={priority === "High" ? "default" : "outline"}
+          onClick={() => setPriority((p) => (p === "High" ? "all" : "High"))}>
+          <Flame className="mr-1.5 h-4 w-4" />High Priority
+        </Button>
+        <Select value={category} onValueChange={setCategory}>
+          <SelectTrigger data-testid="escalated-filter-category" className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[11px] font-medium uppercase tracking-wider text-zinc-400">Category</span>
+        <FilterPill testid="escalated-pill-category-all" active={category === "all"} onClick={() => setCategory("all")}>All</FilterPill>
+        {CATEGORIES.map((c) => (
+          <FilterPill key={c} testid={`escalated-pill-category-${c}`} active={category === c} onClick={() => setCategory(c)}>{c}</FilterPill>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+        <table className="w-full min-w-[1000px] text-sm">
+          <thead className="border-b border-border bg-secondary/50 text-left">
+            <tr className="text-[11px] uppercase tracking-wider text-zinc-500">
+              <th className="px-5 py-3 font-medium">Ticket</th>
+              <th className="px-5 py-3 font-medium">Category</th>
+              <th className="px-5 py-3 font-medium">Flat</th>
+              <th className="px-5 py-3 font-medium">Priority</th>
+              <th className="px-5 py-3 font-medium">Resident</th>
+              <th className="px-5 py-3 font-medium">Vendor</th>
+              <th className="px-5 py-3 font-medium">Reason</th>
+              <th className="px-5 py-3 font-medium">Status</th>
+              <th className="px-5 py-3 font-medium">Date &amp; Time</th>
+              <th className="px-5 py-3 font-medium">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={10} className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" /></td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={10} className="py-16 text-center text-sm text-zinc-400"><AlertTriangle className="mx-auto mb-2 h-8 w-8 text-zinc-300" />No escalated tickets. Everything is on track.</td></tr>
+            ) : filtered.map((t) => (
+              <tr key={t.id} data-testid={`escalated-row-${t.id}`} onClick={() => openTicket(t)}
+                className="cursor-pointer border-b border-border last:border-0 hover:bg-secondary/50" style={{ borderLeft: "3px solid #dc2626" }}>
+                <td className="px-5 py-3 font-mono text-xs font-semibold text-red-600">{t.ticket_number}</td>
+                <td className="px-5 py-3 font-medium">{t.category}</td>
+                <td className="px-5 py-3 text-zinc-500">{t.flat || "—"}</td>
+                <td className="px-5 py-3"><PriorityBadge priority={t.priority} /></td>
+                <td className="px-5 py-3 text-zinc-600">{t.resident_name || <span className="text-zinc-300">Unknown</span>}</td>
+                <td className="px-5 py-3 text-zinc-500">{t.vendor_name || <span className="text-zinc-300">Unassigned</span>}</td>
+                <td className="px-5 py-3 text-[12px] font-semibold text-amber-600">{reasonFor(t)}</td>
+                <td className="px-5 py-3"><StatusBadge status={t.status} /></td>
+                <td className="px-5 py-3 whitespace-nowrap text-xs text-zinc-500" data-testid={`escalated-date-${t.id}`}>{fmtDT(t.created_at)}</td>
+                <td className="px-5 py-3">
+                  <Button data-testid={`assign-${t.id}`} size="sm" className="h-8 whitespace-nowrap" onClick={(e) => { e.stopPropagation(); openTicket(t); }}>
+                    <UserPlus className="mr-1 h-3.5 w-3.5" />Assign
+                  </Button>
+                </td>
+              </tr>
             ))}
-      </Panel>
+          </tbody>
+        </table>
+      </div>
+
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+          {selected && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="font-cabinet flex items-center gap-2">
+                  {selected.ticket_number}
+                  {selected.ai_generated && <Bot className="h-4 w-4 text-sky-600" />}
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-4 space-y-4">
+                <div className="flex gap-2"><StatusBadge status={selected.status} /><PriorityBadge priority={selected.priority} /></div>
+                <Row label="Category" value={selected.category} />
+                <Row label="Flat / Tower" value={`${selected.flat || "—"} ${selected.tower ? "· " + selected.tower : ""}`} />
+                <Row label="Resident" value={`${selected.resident_name} · ${selected.resident_phone || "—"}`} />
+                <Row label="Vendor" value={selected.vendor_name || "Unassigned"} />
+                <Row label="Raised" value={fmtDT(selected.created_at)} />
+                <Row label="Escalation Reason" value={reasonFor(selected)} />
+                <Row label="Preferred Time" value={selected.preferred_time || "—"} />
+                <div>
+                  <p className="overline mb-1">Description</p>
+                  <p className="text-sm text-zinc-700">{selected.description}</p>
+                </div>
+                {selected.raw_message && (
+                  <div className="rounded-md bg-secondary p-3">
+                    <p className="overline mb-1">Original Message</p>
+                    <p className="text-xs italic text-zinc-500">"{selected.raw_message}"</p>
+                    {selected.ai_confidence != null && <p className="mt-1 text-[11px] text-sky-600">AI confidence: {(selected.ai_confidence * 100).toFixed(0)}%</p>}
+                  </div>
+                )}
+
+                <div>
+                  <p className="overline mb-2">Assign / Reassign Vendor</p>
+                  <Select onValueChange={setPendingVendor} value={pendingVendor || ""}>
+                    <SelectTrigger data-testid="assign-vendor-select"><SelectValue placeholder="Select vendor" /></SelectTrigger>
+                    <SelectContent>
+                      {vendors.filter((v) => v.categories?.includes(selected.category)).map((v) => (
+                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                      ))}
+                      {vendors.filter((v) => !v.categories?.includes(selected.category)).map((v) => (
+                        <SelectItem key={v.id} value={v.id}>{v.name} (other)</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button data-testid="assign-vendor-confirm" size="sm" className="mt-2 w-full"
+                    disabled={!pendingVendor || pendingVendor === selected.vendor_id} onClick={() => assign(pendingVendor)}>
+                    <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                    {selected.vendor_id ? "Reassign Vendor" : "Assign Vendor"}
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button data-testid="ticket-pending-btn" size="sm" variant="outline" onClick={() => setStatusVal("Pending")}><Clock className="mr-1 h-3.5 w-3.5" />Pending</Button>
+                  <Button data-testid="ticket-close-btn" size="sm" onClick={close}><CheckCircle2 className="mr-1 h-3.5 w-3.5" />Resolve</Button>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="overline mb-3">Timeline</p>
+                  <div className="space-y-3">
+                    {(selected.timeline || []).map((ev, i) => (
+                      <div key={i} className="flex gap-3">
+                        <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-zinc-900" />
+                        <div>
+                          <p className="text-sm font-medium">{ev.event}</p>
+                          {ev.detail && <p className="text-xs text-zinc-400">{ev.detail}</p>}
+                          <p className="text-[10px] text-zinc-300">{new Date(ev.at).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
+
+const Row = ({ label, value }) => (
+  <div className="flex justify-between border-b border-border pb-2 text-sm">
+    <span className="text-zinc-400">{label}</span><span className="text-right font-medium text-zinc-800">{value}</span>
+  </div>
+);

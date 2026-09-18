@@ -261,3 +261,10 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Change: for group-originated messages, the ticket acknowledgement / duplicate notice / low-confidence "team will review" reply are now sent to the complainant's PERSONAL chat (their phone) instead of into the group, for a cleaner group.
 - `pipeline.py` process_message: replaced group `reply_target`/`quote` with `ack_target = phone`; create_ticket called with notify_to=phone, notify_reply_to=None; duplicate + low-confidence replies DM the person. Vendor job messages unchanged.
 - Verified via /api/whapi/webhook/read with a mapped group: log shows send_text target = personal number (919812345678), not the group chat_id (delivery best-effort; failed only because preview Whapi token is a placeholder).
+
+## Escalated Tickets page aligned with Tickets tab (2026-06)
+- Rewrote `frontend/src/pages/society/Escalated.jsx` to mirror the Tickets page.
+- Added vendor-assignment popup: clicking a row or the Assign button opens the same Sheet (vendor select + Assign/Reassign confirm button, Pending/Resolve actions, description, original message, timeline) using /society/tickets/:id, /assign, PUT status, /close.
+- Added filters like Tickets: search (ticket/flat/resident/vendor/category), High Priority toggle, Category dropdown + pills (client-side over /society/tickets/escalated).
+- Table now shows all Tickets fields incl. previously missing Vendor and Date & Time, plus Escalation Reason + Action.
+- Verified via screenshot: 13 escalated rows, filters render, assignment popup opens with vendor dropdown. Frontend compiled clean.
