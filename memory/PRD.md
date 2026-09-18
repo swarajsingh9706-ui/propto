@@ -268,3 +268,8 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Added filters like Tickets: search (ticket/flat/resident/vendor/category), High Priority toggle, Category dropdown + pills (client-side over /society/tickets/escalated).
 - Table now shows all Tickets fields incl. previously missing Vendor and Date & Time, plus Escalation Reason + Action.
 - Verified via screenshot: 13 escalated rows, filters render, assignment popup opens with vendor dropdown. Frontend compiled clean.
+
+## Fix: Tickets table double-flicker on open (2026-06)
+- Cause: Tickets.jsx had two useEffects each firing load() on mount (filter effect + search effect), amplified by React StrictMode dev double-invoke -> 3 fetches on open.
+- Fix: consolidated into ONE debounced effect over [status, category, priority, search] with a clearTimeout cleanup, so StrictMode's double-invoke collapses to a single fetch (search debounced 400ms, filters immediate).
+- Verified via network capture: exactly 1 tickets-list fetch on open (was 3). No flicker.

@@ -57,8 +57,13 @@ export default function Tickets() {
     } catch (e) { toast.error(apiError(e)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status, category, priority]);
-  useEffect(() => { const t = setTimeout(load, 400); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
+  // Single debounced loader for all filters. The cleanup cancels the pending
+  // fetch, so React StrictMode's double-invoke (dev) collapses to one call — no flicker.
+  useEffect(() => {
+    const t = setTimeout(load, search ? 400 : 0);
+    return () => clearTimeout(t);
+    /* eslint-disable-next-line */
+  }, [status, category, priority, search]);
   useEffect(() => { api.get("/society/vendors", cfg).then((r) => setVendors(r.data)); /* eslint-disable-next-line */ }, []);
 
   const openTicket = async (t) => {
