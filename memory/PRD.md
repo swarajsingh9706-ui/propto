@@ -277,3 +277,8 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 ## Revert ack to group + taxonomy update (2026-06)
 - Reverted pipeline.py process_message: group acknowledgements/duplicate/low-confidence replies go back INTO the group (reply_target=group_chat_id, quoting original) instead of the complainant's personal chat.
 - Taxonomy updated to Propto_Taxonomy_Corrected.xlsx -> data/taxonomy.json rebuilt = 16,049 items (4,619 vendor-routed / 11,430 in-house). situations_kb._XLSX updated. Backend restarted. Match verified (electricity 1.0, lift/water good).
+
+## Vendor tab: add-time priority w/ cascade, category grouping, country codes, colored tags (2026-06)
+- Backend create_vendor (society_router.py): for each selected category, if an explicit priority is given, shift existing vendors in that category with priority>=N by +1 (insert-and-cascade); if blank, append at max+1. Verified: inserting at 2 -> old 2->3, 3->4.
+- Vendors.jsx rewritten: vendors grouped into sections per category (sorted by that category's priority, rank circle shown); colored category tags via CATEGORY_COLORS; Add dialog now has a country-code dropdown (COUNTRY_CODES, default India +91) + separate number field (phone submitted as dial+digits) and a per-category priority input.
+- Verified: frontend compiles, grouped UI + colored tags + India-default dropdown render (screenshots); cascade shift via API. Test vendors cleaned up.

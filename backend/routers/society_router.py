@@ -91,6 +91,32 @@ async def list_vendors(society_id: str = None, user: dict = Depends(require_soci
 async def create_vendor(body: VendorCreate, society_id: str = None, user: dict = Depends(require_society_admin)):
     sid = society_id or _sid(user)
     doc = body.model_dump()
+    priorities = dict(doc.get("priorities") or {})
+    for cat in (doc.get("categories") or []):
+        desired = priorities.get(cat)
+        try:
+            desired = int(desired)
+            if desired <= 0:
+                desired = None
+        except (TypeError, ValueError):
+            desired = None
+        if desired is None:
+            # No explicit priority -> append at the end of this category (max + 1).
+            existing = await db.vendors.find({"society_id": sid, "categories": cat}).to_list(1000)
+            mx = 0
+            for e in existing:
+                p = (e.get("priorities") or {}).get(cat)
+                if isinstance(p, int) and p > mx:
+                    mx = p
+            desired = mx + 1
+        else:
+            # Explicit priority -> push existing vendors at/after this slot down by 1.
+            await db.vendors.update_many(
+                {"society_id": sid, "categories": cat, f"priorities.{cat}": {"$gte": desired}},
+                {"$inc": {f"priorities.{cat}": 1}},
+            )
+        priorities[cat] = desired
+    doc["priorities"] = priorities
     doc.update({"society_id": sid, "created_at": now_iso()})
     res = await db.vendors.insert_one(doc)
     doc["_id"] = res.inserted_id
