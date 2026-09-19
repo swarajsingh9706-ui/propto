@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import api from "@/lib/api";
 import {
-  LayoutDashboard, Ticket, Users, Wrench, Bot, ClipboardCheck,
+  LayoutDashboard, Ticket, Users, Wrench, Bot, Bell,
   MessageSquare, BarChart3, Building2, LogOut, ChevronLeft, Vote, ScrollText,
   Package, AlertTriangle, UsersRound, Workflow, Menu, X,
 } from "lucide-react";
@@ -23,7 +24,7 @@ const SOCIETY_NAV = [
   { to: "/residents", label: "Residents", icon: Users },
   { to: "/committee", label: "Committee", icon: UsersRound },
   { to: "/ai-activity", label: "AI Activity", icon: Bot },
-  { to: "/review-queue", label: "Review Queue", icon: ClipboardCheck },
+  { to: "/notifications", label: "Notifications", icon: Bell },
   { to: "/assignment-logic", label: "Assignment Logic", icon: Workflow },
   { to: "/suggestions", label: "Suggestions", icon: Vote },
   { to: "/audit", label: "Audit Log", icon: ScrollText },
@@ -34,9 +35,20 @@ export default function Layout({ children }) {
   const { user, logout, scopeSociety, scopeInto } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const isSuper = user?.role === "super_admin";
   const scoped = isSuper && scopeSociety;
   const nav = isSuper && !scoped ? SUPER_NAV : SOCIETY_NAV;
+
+  useEffect(() => {
+    if (isSuper && !scoped) return;
+    const params = scoped ? { society_id: scopeSociety } : {};
+    const load = () => api.get("/society/notifications/unread-count", { params })
+      .then((r) => setUnread(r.data.unread)).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [isSuper, scoped, scopeSociety]);
 
   const exitScope = () => {
     scopeInto(null);
@@ -87,6 +99,9 @@ export default function Layout({ children }) {
             >
               <item.icon className="h-4 w-4" strokeWidth={1.75} />
               {item.label}
+              {item.to === "/notifications" && unread > 0 && (
+                <span data-testid="nav-notif-badge" className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread}</span>
+              )}
             </NavLink>
           ))}
         </nav>

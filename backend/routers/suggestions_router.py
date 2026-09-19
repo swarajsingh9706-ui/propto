@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api/society/suggestions", tags=["suggestions"])
 
 
 def _clean(d):
+    d["admin_vote"] = (d.get("voters") or {}).get("admin_panel")
     d["id"] = str(d.pop("_id"))
     d.pop("voters", None)
     return d
@@ -89,10 +90,17 @@ async def vote(sug_id: str, body: SuggestionVote, user: dict = Depends(require_s
     if not s:
         raise HTTPException(status_code=404, detail="Suggestion not found")
     voters = s.get("voters", {}) or {}
-    voters[f"manual_{uuid.uuid4().hex[:8]}"] = "yes" if body.vote == "yes" else "no"
+    key = "admin_panel"
+    desired = "yes" if body.vote == "yes" else "no"
+    if voters.get(key) == desired:
+        voters.pop(key, None)   # clicking the selected option again -> deselect
+        selected = None
+    else:
+        voters[key] = desired   # select / switch vote
+        selected = desired
     yes, no = _recompute(voters)
     await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"voters": voters, "yes_votes": yes, "no_votes": no, "updated_at": now_iso()}})
-    return {"yes_votes": yes, "no_votes": no}
+    return {"yes_votes": yes, "no_votes": no, "admin_vote": selected}
 
 
 @router.delete("/{sug_id}")

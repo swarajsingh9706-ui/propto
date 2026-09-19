@@ -282,3 +282,16 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Backend create_vendor (society_router.py): for each selected category, if an explicit priority is given, shift existing vendors in that category with priority>=N by +1 (insert-and-cascade); if blank, append at max+1. Verified: inserting at 2 -> old 2->3, 3->4.
 - Vendors.jsx rewritten: vendors grouped into sections per category (sorted by that category's priority, rank circle shown); colored category tags via CATEGORY_COLORS; Add dialog now has a country-code dropdown (COUNTRY_CODES, default India +91) + separate number field (phone submitted as dial+digits) and a per-category priority input.
 - Verified: frontend compiles, grouped UI + colored tags + India-default dropdown render (screenshots); cascade shift via API. Test vendors cleaned up.
+
+## Dashboard batch: notifications, date ranges, suggestion fixes, resident edit (2026-06)
+- Residents: added Edit dialog (Pencil icon per active row) -> PUT /society/residents/:id. Testids edit-resident-*, save-edit-resident-btn.
+- Reports: DateRangeFilter (All/This Week/This Month/This Year/Custom) -> /society/reports?start&end. Backend filters tickets by created_at range; daily series + vendor performance now range-aware.
+- Audit Log: DateRangeFilter -> /society/audit?start&end (created_at range filter).
+- AI Activity: log panel restyled to dark grey (bg-zinc-900 / light text) for readability + DateRangeFilter -> /society/ai/activity?start&end (logs+stats range-aware). Removed obsolete color.
+- Suggestions:
+  - Categories expanded (Electricity, Water Supply, Plumbing, Lift/Elevator, Cleaning, Waste Management, Gardening/Landscaping, Safety, etc).
+  - Admin vote is now a single toggle (voters key "admin_panel"): click Yes -> select (+1); click again -> deselect (-1); click No -> switch. Endpoint returns admin_vote; list returns admin_vote per suggestion; buttons highlight selection. Verified via curl (yes->16, yes again->15/null, no->switch).
+  - Group polls captured: a poll created BY a resident inside the WhatsApp group now auto-creates a suggestion (source="group_poll") on the reader webhook, with generic option bars + counts synced. Verified by posting fake Whapi poll payloads to /api/whapi/webhook/read (multi-option + yes/no both captured).
+- Notifications: new tab (Bell icon) + sidebar unread badge. Backend routers/notifications_router.py derives from overdue tickets, escalated tickets, assets due-soon/overdue, new suggestions (14d), pending resident approvals. Endpoints GET /society/notifications, GET /society/notifications/unread-count, POST /society/notifications/read {ids|all}; read state persisted in notification_reads collection.
+- Removed Review Queue nav item + route (ReviewQueue.jsx and backend review-queue endpoints left intact, just unlinked).
+- ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the DEPLOYED prod (old code); new endpoints verified against local backend only. Redeploy required to sync frontend+backend and run full UI e2e.

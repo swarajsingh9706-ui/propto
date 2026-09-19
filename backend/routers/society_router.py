@@ -29,13 +29,21 @@ def _actor(user):
 
 
 @router.get("/audit")
-async def audit_log(society_id: str = None, category: str = None, limit: int = 300, user: dict = Depends(require_society_admin)):
+async def audit_log(society_id: str = None, category: str = None, start: str = None, end: str = None,
+                    limit: int = 500, user: dict = Depends(require_society_admin)):
     sid = society_id or _sid(user)
     if not sid:
         raise HTTPException(status_code=400, detail="society_id required")
     q = {"society_id": sid}
     if category and category != "all":
         q["category"] = category
+    if start or end:
+        rng = {}
+        if start:
+            rng["$gte"] = f"{start}T00:00:00"
+        if end:
+            rng["$lte"] = f"{end}T23:59:59.999999"
+        q["created_at"] = rng
     return [_clean(d) for d in await db.audit_logs.find(q).sort("created_at", -1).to_list(limit)]
 
 

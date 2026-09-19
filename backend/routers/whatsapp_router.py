@@ -5,6 +5,7 @@ import os
 import asyncio
 import logging
 import json
+import uuid
 
 from db import db
 from models import SimulateMessage, GroupConnect, TestSend, now_iso
@@ -143,47 +144,67 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
         await _ack(phone, f"🕒 Sure — please reply with your preferred visit time for {num} (e.g. \"Tomorrow 4 PM\").")
 
 
-async def _apply_poll_results(m: dict):
+async def _apply_poll_results(m: dict, create_if_missing: bool = False):
     poll = m.get("poll") or {}
     pu = m.get("poll_update") or {}
     match_ids = [x for x in [m.get("id"), pu.get("poll_id")] if x]
+    gid = m.get("group_chat_id")
+    soc = await db.societies.find_one({"whatsapp_group.chat_id": gid}) if gid else None
+    title = (poll.get("title") or "").split(" — Do you support")[0].strip()
     s = None
     for mid in match_ids:
         s = await db.suggestions.find_one({"poll_message_id": mid})
         if s:
             break
-    if not s and poll.get("title"):
-        title = poll["title"].split(" — Do you support")[0].strip()
+    if not s and title:
         q = {"title": title}
-        gid = m.get("group_chat_id")
-        if gid:
-            soc = await db.societies.find_one({"whatsapp_group.chat_id": gid})
-            if soc:
-                q["society_id"] = str(soc["_id"])
+        if soc:
+            q["society_id"] = str(soc["_id"])
         s = await db.suggestions.find_one(q, sort=[("created_at", -1)])
         if s and match_ids:
             await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"poll_message_id": match_ids[0]}})
+    # A poll created by a resident inside the WhatsApp group -> capture as a new suggestion.
+    if not s and create_if_missing and soc and title:
+        doc = {
+            "society_id": str(soc["_id"]), "title": title, "category": "General",
+            "author_name": "WhatsApp Group", "flat": "", "status": "Under Review",
+            "voters": {}, "yes_votes": 0, "no_votes": 0, "poll_posted": True,
+            "poll_message_id": match_ids[0] if match_ids else f"grp-{uuid.uuid4().hex}",
+            "source": "group_poll", "created_at": now_iso(), "updated_at": now_iso(),
+        }
+        res = await db.suggestions.insert_one(doc)
+        s = await db.suggestions.find_one({"_id": res.inserted_id})
+        await audit.log(str(soc["_id"]), "suggestion_created", f"Group poll captured: {title}", actor="WhatsApp Group", category="suggestion")
+        logger.info("group poll captured as suggestion: %s", title)
     if not s:
         logger.info("poll update ignored — no suggestion for ids %s title %s", match_ids, poll.get("title"))
         return
     results = poll.get("results") or []
+    options = []
     yes = no = None
-    for i, r in enumerate(results):
-        name = (r.get("name") or "").strip().lower()
+    for r in results:
+        name = (r.get("name") or "").strip()
         cnt = r.get("count")
         if cnt is None:
             cnt = len(r.get("voters") or [])
-        if "yes" in name:
+        cnt = cnt or 0
+        options.append({"name": name, "count": cnt})
+        low = name.lower()
+        if "yes" in low:
             yes = cnt
-        elif "no" in name:
+        elif "no" in low:
             no = cnt
-    if yes is None and no is None and len(results) >= 2:
-        yes = results[0].get("count") or 0
-        no = results[1].get("count") or 0
-    if yes is None and no is None:
-        return
-    await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"yes_votes": yes or 0, "no_votes": no or 0, "updated_at": now_iso()}})
-    logger.info("poll %s updated -> yes=%s no=%s", s.get("poll_message_id"), yes, no)
+    upd = {"updated_at": now_iso()}
+    if options:
+        upd["options"] = options
+    if yes is not None or no is not None:
+        upd["yes_votes"] = yes or 0
+        upd["no_votes"] = no or 0
+    elif len(options) >= 2 and not s.get("source") == "group_poll":
+        upd["yes_votes"] = options[0]["count"]
+        upd["no_votes"] = options[1]["count"]
+    await db.suggestions.update_one({"_id": s["_id"]}, {"$set": upd})
+    logger.info("poll %s updated -> yes=%s no=%s options=%s", s.get("poll_message_id"), yes, no, options)
 
 
 async def _vote_suggestion(sug_id: str, phone: str, vote: str):
@@ -275,15 +296,14 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
         logger.info("Whapi[%s] parsed %d msg(s): %s", role, len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
         for m in messages:
             if m.get("type") == "poll" or m.get("poll"):
-                # Polls are owned by the SENDER account -> only its webhook handles votes.
-                if role == "read":
-                    continue
                 if m.get("poll_fetch_id") and not (m.get("poll") or {}).get("results"):
                     fetched = await wa.get_poll_results(m["poll_fetch_id"])
                     if fetched:
                         m["poll"] = fetched
                         m["id"] = m.get("poll_fetch_id")
-                await _apply_poll_results(m)
+                # READER sees group-member polls -> capture them as new suggestions.
+                # SENDER owns admin-posted polls -> update tallies of existing suggestions.
+                await _apply_poll_results(m, create_if_missing=(role == "read"))
                 continue
             group_chat_id = m.get("group_chat_id")
             # Role routing: reader handles group chatter; sender handles DMs/buttons.

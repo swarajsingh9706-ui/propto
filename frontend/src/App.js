@@ -16,7 +16,7 @@ import Tickets from "@/pages/society/Tickets";
 import Vendors from "@/pages/society/Vendors";
 import Residents from "@/pages/society/Residents";
 import AIActivity from "@/pages/society/AIActivity";
-import ReviewQueue from "@/pages/society/ReviewQueue";
+import Notifications from "@/pages/society/Notifications";
 import Assets from "@/pages/society/Assets";
 import Escalated from "@/pages/society/Escalated";
 import Committee from "@/pages/society/Committee";
@@ -65,7 +65,7 @@ function App() {
             <Route path="/vendors" element={<Protected><Vendors /></Protected>} />
             <Route path="/residents" element={<Protected><Residents /></Protected>} />
             <Route path="/ai-activity" element={<Protected><AIActivity /></Protected>} />
-            <Route path="/review-queue" element={<Protected><ReviewQueue /></Protected>} />
+            <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
             <Route path="/assets" element={<Protected><Assets /></Protected>} />
             <Route path="/escalated" element={<Protected><Escalated /></Protected>} />
             <Route path="/committee" element={<Protected><Committee /></Protected>} />

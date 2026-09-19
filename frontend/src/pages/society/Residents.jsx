@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Loader2, Trash2, Upload, Users, Search, Copy, Link2, Check, X } from "lucide-react";
+import { Plus, Loader2, Trash2, Upload, Users, Search, Copy, Link2, Check, X, Pencil } from "lucide-react";
 
 const empty = { name: "", phone: "", flat: "", tower: "", status: "Owner" };
 
@@ -17,6 +17,8 @@ export default function Residents() {
   const { data: residents, loading, reload } = useFetch("/society/residents");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState(empty);
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
   const [statusF, setStatusF] = useState("all");
@@ -38,6 +40,17 @@ export default function Residents() {
     catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
   };
   const del = async (r) => { try { await api.delete(`/society/residents/${r.id}`); reload(); } catch (e) { toast.error(apiError(e)); } };
+  const openEdit = (r) => {
+    setEditing(r);
+    setEditForm({ name: r.name || "", phone: r.phone || "", flat: r.flat || "", tower: r.tower || "", status: r.status || "Owner" });
+  };
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/society/residents/${editing.id}`, editForm, cfg);
+      toast.success("Resident updated"); setEditing(null); reload();
+    } catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
+  };
   const reject = async (r) => {
     setBusyId(r.id);
     try { await api.delete(`/society/residents/${r.id}`); toast.success("Request rejected & removed"); reload(); }
@@ -201,7 +214,8 @@ export default function Residents() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <button data-testid={`edit-resident-${r.id}`} onClick={() => openEdit(r)} className="text-zinc-400 hover:text-brand"><Pencil className="h-4 w-4" /></button>
                         <button data-testid={`delete-resident-${r.id}`} onClick={() => del(r)} className="text-zinc-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     )}
@@ -212,6 +226,30 @@ export default function Residents() {
           </table>
         </div>
       )}
+
+      {/* Edit resident dialog */}
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle className="font-cabinet">Edit Resident</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Label className="text-xs">Name</Label><Input data-testid="edit-resident-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="mt-1" /></div>
+            <div className="col-span-2"><Label className="text-xs">Phone (with country code)</Label><Input data-testid="edit-resident-phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="918111111101" className="mt-1" /></div>
+            <div><Label className="text-xs">Flat</Label><Input data-testid="edit-resident-flat" value={editForm.flat} onChange={(e) => setEditForm({ ...editForm, flat: e.target.value })} className="mt-1" /></div>
+            <div><Label className="text-xs">Tower</Label><Input data-testid="edit-resident-tower" value={editForm.tower} onChange={(e) => setEditForm({ ...editForm, tower: e.target.value })} className="mt-1" /></div>
+            <div className="col-span-2">
+              <Label className="text-xs">Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
+                <SelectTrigger data-testid="edit-resident-status" className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Owner">Owner</SelectItem>
+                  <SelectItem value="Tenant">Tenant</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter><Button data-testid="save-edit-resident-btn" onClick={saveEdit} disabled={saving || !editForm.name || !editForm.phone}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

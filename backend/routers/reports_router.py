@@ -12,16 +12,34 @@ def _sid(user):
 
 
 @router.get("")
-async def reports(society_id: str = None, user: dict = Depends(require_society_admin)):
+async def reports(society_id: str = None, start: str = None, end: str = None,
+                  user: dict = Depends(require_society_admin)):
     sid = society_id or _sid(user)
-    q = {"society_id": sid}
-    tickets = await db.tickets.find(q).to_list(5000)
+    tickets = await db.tickets.find({"society_id": sid}).to_list(5000)
 
-    # daily complaints last 14 days
+    def _in_range(t):
+        d = (t.get("created_at") or "")[:10]
+        if start and d < start:
+            return False
+        if end and d > end:
+            return False
+        return True
+
+    tickets = [t for t in tickets if _in_range(t)]
+
+    # daily complaints — across selected range, else last 14 days
     daily = {}
-    for i in range(13, -1, -1):
-        d = (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d")
-        daily[d] = 0
+    if start and end:
+        s = datetime.fromisoformat(start)
+        e = datetime.fromisoformat(end)
+        span = min((e - s).days, 365)
+        for i in range(span, -1, -1):
+            d = (e - timedelta(days=i)).strftime("%Y-%m-%d")
+            daily[d] = 0
+    else:
+        for i in range(13, -1, -1):
+            d = (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d")
+            daily[d] = 0
     for t in tickets:
         d = (t.get("created_at") or "")[:10]
         if d in daily:
@@ -49,14 +67,21 @@ async def reports(society_id: str = None, user: dict = Depends(require_society_a
                 pass
     resolution_series = [{"category": k, "hours": round(res_times[k] / counts[k], 1)} for k in res_times]
 
-    # vendor performance
+    # vendor performance (range-aware, from filtered tickets)
+    vp_map = {}
+    for t in tickets:
+        vid = t.get("vendor_id")
+        if not vid:
+            continue
+        name = t.get("vendor_name") or "Vendor"
+        rec = vp_map.setdefault(vid, {"vendor": name, "assigned": 0, "resolved": 0})
+        rec["assigned"] += 1
+        if t.get("status") == "Resolved":
+            rec["resolved"] += 1
     vp = []
-    for v in await db.vendors.find(q).to_list(500):
-        vid = str(v["_id"])
-        assigned = await db.tickets.count_documents({"vendor_id": vid})
-        resolved = await db.tickets.count_documents({"vendor_id": vid, "status": "Resolved"})
-        vp.append({"vendor": v["name"], "assigned": assigned, "resolved": resolved,
-                   "rate": round(resolved / assigned * 100) if assigned else 0})
+    for rec in vp_map.values():
+        rec["rate"] = round(rec["resolved"] / rec["assigned"] * 100) if rec["assigned"] else 0
+        vp.append(rec)
     vp.sort(key=lambda x: -x["resolved"])
 
     total = len(tickets)

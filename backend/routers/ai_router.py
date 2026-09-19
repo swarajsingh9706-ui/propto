@@ -19,10 +19,18 @@ def _sid(user):
 
 
 @router.get("/activity")
-async def activity(society_id: str = None, user: dict = Depends(require_society_admin)):
+async def activity(society_id: str = None, start: str = None, end: str = None,
+                   user: dict = Depends(require_society_admin)):
     sid = society_id or _sid(user)
-    logs = [_clean(a) for a in await db.ai_activity.find({"society_id": sid}).sort("created_at", -1).limit(100).to_list(100)]
     q = {"society_id": sid}
+    if start or end:
+        rng = {}
+        if start:
+            rng["$gte"] = f"{start}T00:00:00"
+        if end:
+            rng["$lte"] = f"{end}T23:59:59.999999"
+        q["created_at"] = rng
+    logs = [_clean(a) for a in await db.ai_activity.find(q).sort("created_at", -1).limit(200).to_list(200)]
     stats = {
         "detected": await db.ai_activity.count_documents({**q, "decision": "ticket_created"}),
         "ignored": await db.ai_activity.count_documents({**q, "decision": "ignored"}),

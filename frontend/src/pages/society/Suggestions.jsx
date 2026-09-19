@@ -15,7 +15,11 @@ import {
 import { toast } from "sonner";
 import { Plus, Loader2, Vote, ThumbsUp, ThumbsDown, MessageSquare, CheckCircle2, User, Trash2 } from "lucide-react";
 
-const CATEGORIES = ["Infrastructure", "Security", "Maintenance", "Community", "Amenities", "Water Supply", "Parking", "General"];
+const CATEGORIES = [
+  "Infrastructure", "Security", "Maintenance", "Electricity", "Water Supply",
+  "Plumbing", "Lift/Elevator", "Cleaning", "Waste Management", "Gardening/Landscaping",
+  "Parking", "Amenities", "Community", "Safety", "General",
+];
 const STATUSES = ["Under Review", "Approved", "Pending", "Declined"];
 const STATUS_CLS = {
   "Under Review": "bg-amber-50 text-amber-700 border-amber-200",
@@ -23,6 +27,7 @@ const STATUS_CLS = {
   "Pending": "bg-zinc-100 text-zinc-600 border-zinc-200",
   "Declined": "bg-red-50 text-red-700 border-red-200",
 };
+const OPT_COLORS = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#06b6d4", "#ec4899", "#14b8a6"];
 
 const empty = { title: "", category: "Infrastructure", author_name: "", flat: "" };
 
@@ -121,9 +126,13 @@ export default function Suggestions() {
         {list.length === 0 ? (
           <div className="rounded-lg border border-dashed p-12 text-center text-sm text-zinc-400"><Vote className="mx-auto mb-3 h-8 w-8 text-zinc-300" />No suggestions in this view.</div>
         ) : list.map((s) => {
+          const opts = s.options || [];
+          const hasYesNo = opts.some((o) => /yes/i.test(o.name)) && opts.some((o) => /no/i.test(o.name));
+          const isMultiOption = opts.length > 0 && !hasYesNo;
           const total = (s.yes_votes || 0) + (s.no_votes || 0);
           const yesPct = total ? Math.round((s.yes_votes / total) * 100) : 0;
           const noPct = total ? 100 - yesPct : 0;
+          const optTotal = opts.reduce((a, o) => a + (o.count || 0), 0);
           return (
             <div key={s.id} data-testid={`suggestion-${s.id}`} className="rounded-lg border border-border bg-card p-5">
               <div className="flex items-start justify-between gap-4">
@@ -134,6 +143,7 @@ export default function Suggestions() {
                     {s.flat && <><span>·</span><span>{s.flat}</span></>}
                     <span>·</span>
                     <span className="rounded-full bg-brand-green/[0.08] px-2 py-0.5 font-medium text-brand">{s.category}</span>
+                    {s.source === "group_poll" && <span className="flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 font-medium text-green-700" data-testid={`group-poll-badge-${s.id}`}><MessageSquare className="h-3 w-3" />From WhatsApp Group</span>}
                     {s.created_at && <><span>·</span><span data-testid={`suggestion-date-${s.id}`}>{fmtDT(s.created_at)}</span></>}
                   </div>
                 </div>
@@ -147,22 +157,53 @@ export default function Suggestions() {
                 </div>
               </div>
 
-              <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-red-100">
-                <div className="h-full bg-emerald-500" style={{ width: `${yesPct}%` }} />
-                <div className="h-full bg-red-400" style={{ width: `${noPct}%` }} />
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="font-medium text-emerald-600">✓ Yes {s.yes_votes} ({yesPct}%)</span>
-                  <span className="font-medium text-red-500">✗ No {s.no_votes} ({noPct}%)</span>
-                  <span className="text-xs text-zinc-400">{total} total votes</span>
+              {isMultiOption ? (
+                <div className="mt-4 space-y-2.5" data-testid={`poll-options-${s.id}`}>
+                  {opts.map((o, i) => {
+                    const pct = optTotal ? Math.round((o.count / optTotal) * 100) : 0;
+                    return (
+                      <div key={i}>
+                        <div className="mb-1 flex items-center justify-between text-[13px]">
+                          <span className="truncate font-medium text-slate-700">{o.name}</span>
+                          <span className="font-semibold text-slate-500">{o.count} ({pct}%)</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100">
+                          <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: OPT_COLORS[i % OPT_COLORS.length] }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <p className="pt-1 text-xs text-zinc-400">{optTotal} total votes · results synced from WhatsApp group poll</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button data-testid={`vote-yes-${s.id}`} size="sm" variant="outline" onClick={() => castVote(s, "yes")}><ThumbsUp className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />Yes ({s.yes_votes})</Button>
-                  <Button data-testid={`vote-no-${s.id}`} size="sm" variant="outline" onClick={() => castVote(s, "no")}><ThumbsDown className="mr-1.5 h-3.5 w-3.5 text-red-500" />No ({s.no_votes})</Button>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-red-100">
+                    <div className="h-full bg-emerald-500" style={{ width: `${yesPct}%` }} />
+                    <div className="h-full bg-red-400" style={{ width: `${noPct}%` }} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="font-medium text-emerald-600">✓ Yes {s.yes_votes} ({yesPct}%)</span>
+                      <span className="font-medium text-red-500">✗ No {s.no_votes} ({noPct}%)</span>
+                      <span className="text-xs text-zinc-400">{total} total votes</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button data-testid={`vote-yes-${s.id}`} size="sm"
+                        variant={s.admin_vote === "yes" ? "default" : "outline"}
+                        className={s.admin_vote === "yes" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                        onClick={() => castVote(s, "yes")}>
+                        <ThumbsUp className={`mr-1.5 h-3.5 w-3.5 ${s.admin_vote === "yes" ? "text-white" : "text-emerald-600"}`} />Yes ({s.yes_votes})
+                      </Button>
+                      <Button data-testid={`vote-no-${s.id}`} size="sm"
+                        variant={s.admin_vote === "no" ? "default" : "outline"}
+                        className={s.admin_vote === "no" ? "bg-red-500 hover:bg-red-600" : ""}
+                        onClick={() => castVote(s, "no")}>
+                        <ThumbsDown className={`mr-1.5 h-3.5 w-3.5 ${s.admin_vote === "no" ? "text-white" : "text-red-500"}`} />No ({s.no_votes})
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           );
         })}

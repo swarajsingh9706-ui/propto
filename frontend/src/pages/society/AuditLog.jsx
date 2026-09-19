@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { useFetch } from "@/lib/useScope";
+import { useEffect, useState } from "react";
+import api from "@/lib/api";
+import { useScope } from "@/lib/useScope";
 import { PageHeader } from "@/components/Layout";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import {
   Loader2, Ticket, Wrench, Users, MessageSquare, Vote, Building2, ScrollText,
 } from "lucide-react";
@@ -35,13 +37,29 @@ function fmtDT(iso) {
 }
 
 export default function AuditLog() {
-  const { data, loading } = useFetch("/society/audit");
+  const cfg = useScope();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState("all");
-  const rows = (data || []).filter((r) => cat === "all" || r.category === cat);
+  const [range, setRange] = useState({ start: "", end: "" });
+
+  useEffect(() => {
+    setLoading(true);
+    const params = { ...cfg.params };
+    if (cat !== "all") params.category = cat;
+    if (range.start) params.start = range.start;
+    if (range.end) params.end = range.end;
+    api.get("/society/audit", { params })
+      .then((r) => setRows(r.data || []))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line
+  }, [cat, range, cfg.params?.society_id]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader title="Audit Log" subtitle="Activity Trail" />
+      <PageHeader title="Audit Log" subtitle="Activity Trail">
+        <DateRangeFilter onChange={setRange} testidPrefix="audit-range" />
+      </PageHeader>
 
       <div className="mb-5 flex flex-wrap gap-2">
         {CATS.map((c) => (
@@ -58,7 +76,7 @@ export default function AuditLog() {
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-white p-12 text-center text-sm text-zinc-400">
           <ScrollText className="mx-auto mb-3 h-8 w-8 text-zinc-300" />
-          No activity recorded yet. Actions across the app will appear here.
+          No activity recorded for the selected filters.
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
