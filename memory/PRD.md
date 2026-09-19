@@ -273,3 +273,7 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Cause: Tickets.jsx had two useEffects each firing load() on mount (filter effect + search effect), amplified by React StrictMode dev double-invoke -> 3 fetches on open.
 - Fix: consolidated into ONE debounced effect over [status, category, priority, search] with a clearTimeout cleanup, so StrictMode's double-invoke collapses to a single fetch (search debounced 400ms, filters immediate).
 - Verified via network capture: exactly 1 tickets-list fetch on open (was 3). No flicker.
+
+## Revert ack to group + taxonomy update (2026-06)
+- Reverted pipeline.py process_message: group acknowledgements/duplicate/low-confidence replies go back INTO the group (reply_target=group_chat_id, quoting original) instead of the complainant's personal chat.
+- Taxonomy updated to Propto_Taxonomy_Corrected.xlsx -> data/taxonomy.json rebuilt = 16,049 items (4,619 vendor-routed / 11,430 in-house). situations_kb._XLSX updated. Backend restarted. Match verified (electricity 1.0, lift/water good).
