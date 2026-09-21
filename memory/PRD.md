@@ -295,3 +295,10 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Notifications: new tab (Bell icon) + sidebar unread badge. Backend routers/notifications_router.py derives from overdue tickets, escalated tickets, assets due-soon/overdue, new suggestions (14d), pending resident approvals. Endpoints GET /society/notifications, GET /society/notifications/unread-count, POST /society/notifications/read {ids|all}; read state persisted in notification_reads collection.
 - Removed Review Queue nav item + route (ReviewQueue.jsx and backend review-queue endpoints left intact, just unlinked).
 - ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the DEPLOYED prod (old code); new endpoints verified against local backend only. Redeploy required to sync frontend+backend and run full UI e2e.
+
+## Fixes: vendor dup-priority, resident/committee country codes, admin vote delta (2026-06)
+- Vendor priority: added _cascade_priorities() in society_router.py; update_vendor now cascades (insert-at-N, exclude self) so inline priority edits can no longer create duplicate priorities within a society/category. create_vendor refactored to reuse helper. Verified: editing A(1) -> 2 shifts B(2)->3, C(3)->4, all unique.
+- Residents: phone now uses a country-code dropdown (default India +91) on both Add and Edit dialogs; stored as dial+digits; edit splits existing phone via lib/countryCodes.splitPhone.
+- Committee: phone now uses the same country-code dropdown on Add dialog.
+- Shared lib/countryCodes.js (COUNTRY_CODES + splitPhone).
+- Suggestion admin vote: no longer recomputes from voters (which reset WhatsApp-synced counts to 1). Now applies a +1/-1 DELTA on top of existing yes/no counts, tracked in doc.admin_vote; toggle select/deselect/switch. _apply_poll_results re-adds the admin delta on WhatsApp sync so the dashboard vote persists. Verified: base yes=50 -> vote yes=51 -> deselect=50 -> vote no=11 (no reset).

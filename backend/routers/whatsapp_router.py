@@ -198,8 +198,15 @@ async def _apply_poll_results(m: dict, create_if_missing: bool = False):
     if options:
         upd["options"] = options
     if yes is not None or no is not None:
-        upd["yes_votes"] = yes or 0
-        upd["no_votes"] = no or 0
+        by = yes or 0
+        bn = no or 0
+        av = s.get("admin_vote") or (s.get("voters") or {}).get("admin_panel")
+        if av == "yes":
+            by += 1
+        elif av == "no":
+            bn += 1
+        upd["yes_votes"] = by
+        upd["no_votes"] = bn
     elif len(options) >= 2 and not s.get("source") == "group_poll":
         upd["yes_votes"] = options[0]["count"]
         upd["no_votes"] = options[1]["count"]

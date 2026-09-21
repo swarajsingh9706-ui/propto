@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Loader2, UsersRound, Trash2, Phone, Mail } from "lucide-react";
+import { COUNTRY_CODES } from "@/lib/countryCodes";
 
 const ROLES = ["Chairman", "Secretary", "Treasurer", "Vice Chairman", "Joint Secretary", "Member"];
 const ROLE_COLOR = {
@@ -16,7 +17,7 @@ const ROLE_COLOR = {
   Secretary: ["#f5f3ff", "#7c3aed", "#ddd6fe"],
   Treasurer: ["#ecfdf5", "#059669", "#a7f3d0"],
 };
-const empty = { name: "", role: "Member", tower: "", phone: "", email: "" };
+const empty = { name: "", role: "Member", tower: "", dial: "91", phone: "", email: "" };
 
 export default function Committee() {
   const cfg = useScope();
@@ -28,7 +29,10 @@ export default function Committee() {
 
   const create = async () => {
     setSaving(true);
-    try { await api.post("/society/committee", form, cfg); toast.success("Member added"); setOpen(false); setForm(empty); reload(); }
+    try {
+      const payload = { name: form.name, role: form.role, tower: form.tower, email: form.email, phone: form.phone ? form.dial + form.phone.replace(/\D/g, "") : "" };
+      await api.post("/society/committee", payload, cfg); toast.success("Member added"); setOpen(false); setForm(empty); reload();
+    }
     catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
   };
   const del = async (m) => { try { await api.delete(`/society/committee/${m.id}`); reload(); toast.success("Removed"); } catch (e) { toast.error(apiError(e)); } };
@@ -47,7 +51,15 @@ export default function Committee() {
                 <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}><SelectTrigger data-testid="committee-role-select" className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select>
               </div>
               <div><Label className="text-xs">Tower / Block</Label><Input data-testid="committee-tower-input" value={form.tower} onChange={(e) => setForm({ ...form, tower: e.target.value })} className="mt-1" placeholder="Tower A" /></div>
-              <div><Label className="text-xs">Phone</Label><Input data-testid="committee-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" placeholder="919000000001" /></div>
+              <div><Label className="text-xs">Phone</Label>
+                <div className="mt-1 flex gap-2">
+                  <Select value={form.dial} onValueChange={(v) => setForm({ ...form, dial: v })}>
+                    <SelectTrigger data-testid="committee-country-code" className="w-[150px] shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent className="max-h-64">{COUNTRY_CODES.map((c) => <SelectItem key={c.dial + c.label} value={c.dial}>{c.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Input data-testid="committee-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="flex-1" placeholder="9000000001" />
+                </div>
+              </div>
               <div><Label className="text-xs">Email</Label><Input data-testid="committee-email-input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" /></div>
             </div>
             <DialogFooter><Button data-testid="save-committee-btn" onClick={create} disabled={saving || !form.name}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add Member</Button></DialogFooter>

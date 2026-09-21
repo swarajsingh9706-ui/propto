@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/society/suggestions", tags=["suggestions"])
 
 
 def _clean(d):
-    d["admin_vote"] = (d.get("voters") or {}).get("admin_panel")
+    d["admin_vote"] = d.get("admin_vote") or (d.get("voters") or {}).get("admin_panel")
     d["id"] = str(d.pop("_id"))
     d.pop("voters", None)
     return d
@@ -89,18 +89,30 @@ async def vote(sug_id: str, body: SuggestionVote, user: dict = Depends(require_s
     s = await db.suggestions.find_one({"_id": ObjectId(sug_id)})
     if not s:
         raise HTTPException(status_code=404, detail="Suggestion not found")
-    voters = s.get("voters", {}) or {}
-    key = "admin_panel"
     desired = "yes" if body.vote == "yes" else "no"
-    if voters.get(key) == desired:
-        voters.pop(key, None)   # clicking the selected option again -> deselect
-        selected = None
+    # Admin vote is a delta ON TOP of the existing (incl. WhatsApp-synced) counts,
+    # never a recompute -> group poll tallies are preserved.
+    cur = s.get("admin_vote") or (s.get("voters") or {}).get("admin_panel")
+    yes = int(s.get("yes_votes") or 0)
+    no = int(s.get("no_votes") or 0)
+    if cur == "yes":
+        yes = max(0, yes - 1)
+    elif cur == "no":
+        no = max(0, no - 1)
+    if desired == cur:
+        new_vote = None                      # clicking the selected option again -> deselect
     else:
-        voters[key] = desired   # select / switch vote
-        selected = desired
-    yes, no = _recompute(voters)
-    await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"voters": voters, "yes_votes": yes, "no_votes": no, "updated_at": now_iso()}})
-    return {"yes_votes": yes, "no_votes": no, "admin_vote": selected}
+        new_vote = desired                   # select / switch
+        if desired == "yes":
+            yes += 1
+        else:
+            no += 1
+    voters = s.get("voters", {}) or {}
+    voters.pop("admin_panel", None)          # retire legacy voter key
+    await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {
+        "admin_vote": new_vote, "yes_votes": yes, "no_votes": no,
+        "voters": voters, "updated_at": now_iso()}})
+    return {"yes_votes": yes, "no_votes": no, "admin_vote": new_vote}
 
 
 @router.delete("/{sug_id}")

@@ -28,6 +28,22 @@ def _actor(user):
     return user.get("name") or user.get("email") or user.get("role", "admin")
 
 
+async def _cascade_priorities(sid: str, priorities: dict, exclude_id: str = None):
+    # For each category, "insert at N": shift OTHER vendors with priority >= N down by +1.
+    # Guarantees no two vendors share the same priority within a society/category.
+    for cat, desired in (priorities or {}).items():
+        try:
+            desired = int(desired)
+        except (TypeError, ValueError):
+            continue
+        if desired <= 0:
+            continue
+        q = {"society_id": sid, "categories": cat, f"priorities.{cat}": {"$gte": desired}}
+        if exclude_id:
+            q["_id"] = {"$ne": ObjectId(exclude_id)}
+        await db.vendors.update_many(q, {"$inc": {f"priorities.{cat}": 1}})
+
+
 @router.get("/audit")
 async def audit_log(society_id: str = None, category: str = None, start: str = None, end: str = None,
                     limit: int = 500, user: dict = Depends(require_society_admin)):
@@ -119,10 +135,7 @@ async def create_vendor(body: VendorCreate, society_id: str = None, user: dict =
             desired = mx + 1
         else:
             # Explicit priority -> push existing vendors at/after this slot down by 1.
-            await db.vendors.update_many(
-                {"society_id": sid, "categories": cat, f"priorities.{cat}": {"$gte": desired}},
-                {"$inc": {f"priorities.{cat}": 1}},
-            )
+            await _cascade_priorities(sid, {cat: desired})
         priorities[cat] = desired
     doc["priorities"] = priorities
     doc.update({"society_id": sid, "created_at": now_iso()})
@@ -135,6 +148,17 @@ async def create_vendor(body: VendorCreate, society_id: str = None, user: dict =
 @router.put("/vendors/{vendor_id}")
 async def update_vendor(vendor_id: str, body: VendorUpdate, user: dict = Depends(require_society_admin)):
     updates = body.model_dump(exclude_none=True)
+    current = await db.vendors.find_one({"_id": ObjectId(vendor_id)})
+    if not current:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    new_pr = updates.get("priorities")
+    if new_pr:
+        cur_pr = current.get("priorities") or {}
+        # Only cascade the categories whose priority actually changed -> avoids
+        # duplicate priorities when an admin edits a vendor's rank inline.
+        changed = {cat: n for cat, n in new_pr.items()
+                   if isinstance(n, int) and n > 0 and cur_pr.get(cat) != n}
+        await _cascade_priorities(current.get("society_id"), changed, exclude_id=vendor_id)
     await db.vendors.update_one({"_id": ObjectId(vendor_id)}, {"$set": updates})
     v = await db.vendors.find_one({"_id": ObjectId(vendor_id)})
     await audit.log(v.get("society_id"), "vendor_updated", f"Vendor {v.get('name')} details updated", actor=_actor(user), category="vendor")

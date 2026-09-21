@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Loader2, Trash2, Upload, Users, Search, Copy, Link2, Check, X, Pencil } from "lucide-react";
+import { COUNTRY_CODES, splitPhone } from "@/lib/countryCodes";
 
-const empty = { name: "", phone: "", flat: "", tower: "", status: "Owner" };
+const empty = { name: "", dial: "91", phone: "", flat: "", tower: "", status: "Owner" };
 
 export default function Residents() {
   const cfg = useScope();
@@ -36,18 +37,23 @@ export default function Residents() {
 
   const create = async () => {
     setSaving(true);
-    try { await api.post("/society/residents", form, cfg); toast.success("Resident added"); setOpen(false); setForm(empty); reload(); }
+    try {
+      const payload = { name: form.name, phone: form.dial + (form.phone || "").replace(/\D/g, ""), flat: form.flat, tower: form.tower, status: form.status };
+      await api.post("/society/residents", payload, cfg); toast.success("Resident added"); setOpen(false); setForm(empty); reload();
+    }
     catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
   };
   const del = async (r) => { try { await api.delete(`/society/residents/${r.id}`); reload(); } catch (e) { toast.error(apiError(e)); } };
   const openEdit = (r) => {
+    const { dial, number } = splitPhone(r.phone || "");
     setEditing(r);
-    setEditForm({ name: r.name || "", phone: r.phone || "", flat: r.flat || "", tower: r.tower || "", status: r.status || "Owner" });
+    setEditForm({ name: r.name || "", dial, phone: number, flat: r.flat || "", tower: r.tower || "", status: r.status || "Owner" });
   };
   const saveEdit = async () => {
     setSaving(true);
     try {
-      await api.put(`/society/residents/${editing.id}`, editForm, cfg);
+      const payload = { name: editForm.name, phone: editForm.dial + (editForm.phone || "").replace(/\D/g, ""), flat: editForm.flat, tower: editForm.tower, status: editForm.status };
+      await api.put(`/society/residents/${editing.id}`, payload, cfg);
       toast.success("Resident updated"); setEditing(null); reload();
     } catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
   };
@@ -108,7 +114,15 @@ export default function Residents() {
             <DialogHeader><DialogTitle className="font-cabinet">New Resident</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Label className="text-xs">Name</Label><Input data-testid="resident-name-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
-              <div className="col-span-2"><Label className="text-xs">Phone (with country code)</Label><Input data-testid="resident-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="918111111101" className="mt-1" /></div>
+              <div className="col-span-2"><Label className="text-xs">Phone</Label>
+                <div className="mt-1 flex gap-2">
+                  <Select value={form.dial} onValueChange={(v) => setForm({ ...form, dial: v })}>
+                    <SelectTrigger data-testid="resident-country-code" className="w-[150px] shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent className="max-h-64">{COUNTRY_CODES.map((c) => <SelectItem key={c.dial + c.label} value={c.dial}>{c.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Input data-testid="resident-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="8111111101" className="flex-1" />
+                </div>
+              </div>
               <div><Label className="text-xs">Flat</Label><Input data-testid="resident-flat-input" value={form.flat} onChange={(e) => setForm({ ...form, flat: e.target.value })} placeholder="B302" className="mt-1" /></div>
               <div><Label className="text-xs">Tower</Label><Input value={form.tower} onChange={(e) => setForm({ ...form, tower: e.target.value })} placeholder="B" className="mt-1" /></div>
               <div className="col-span-2">
@@ -233,7 +247,15 @@ export default function Residents() {
           <DialogHeader><DialogTitle className="font-cabinet">Edit Resident</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Label className="text-xs">Name</Label><Input data-testid="edit-resident-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="mt-1" /></div>
-            <div className="col-span-2"><Label className="text-xs">Phone (with country code)</Label><Input data-testid="edit-resident-phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="918111111101" className="mt-1" /></div>
+            <div className="col-span-2"><Label className="text-xs">Phone</Label>
+              <div className="mt-1 flex gap-2">
+                <Select value={editForm.dial} onValueChange={(v) => setEditForm({ ...editForm, dial: v })}>
+                  <SelectTrigger data-testid="edit-resident-country-code" className="w-[150px] shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent className="max-h-64">{COUNTRY_CODES.map((c) => <SelectItem key={c.dial + c.label} value={c.dial}>{c.label}</SelectItem>)}</SelectContent>
+                </Select>
+                <Input data-testid="edit-resident-phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="8111111101" className="flex-1" />
+              </div>
+            </div>
             <div><Label className="text-xs">Flat</Label><Input data-testid="edit-resident-flat" value={editForm.flat} onChange={(e) => setEditForm({ ...editForm, flat: e.target.value })} className="mt-1" /></div>
             <div><Label className="text-xs">Tower</Label><Input data-testid="edit-resident-tower" value={editForm.tower} onChange={(e) => setEditForm({ ...editForm, tower: e.target.value })} className="mt-1" /></div>
             <div className="col-span-2">
