@@ -302,3 +302,6 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 - Committee: phone now uses the same country-code dropdown on Add dialog.
 - Shared lib/countryCodes.js (COUNTRY_CODES + splitPhone).
 - Suggestion admin vote: no longer recomputes from voters (which reset WhatsApp-synced counts to 1). Now applies a +1/-1 DELTA on top of existing yes/no counts, tracked in doc.admin_vote; toggle select/deselect/switch. _apply_poll_results re-adds the admin delta on WhatsApp sync so the dashboard vote persists. Verified: base yes=50 -> vote yes=51 -> deselect=50 -> vote no=11 (no reset).
+
+## Perf: instant vendor assign (2026-06)
+- pipeline.assign_vendor() was blocking on await wa.send_buttons() (Whapi HTTP, 4-5s, worse on token timeout). DB update/timeline/audit are instant; the WhatsApp send now runs fire-and-forget via _fire() helper (asyncio.create_task with error logging; inline fallback when no loop). POST /society/tickets/:id/assign now returns in ~0.1s. Affects both Tickets and Escalated assignment sidebars (shared endpoint).

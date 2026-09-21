@@ -1,5 +1,6 @@
 import os
 import uuid
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
@@ -13,6 +14,21 @@ import audit
 logger = logging.getLogger("propto.pipeline")
 
 SLA_HOURS = {"Critical": 2, "High": 4, "Medium": 24, "Low": 72}
+
+
+def _fire(coro):
+    # Run a best-effort WhatsApp/network call in the background so API responses
+    # stay instant and are never blocked by Whapi latency/timeouts.
+    async def _runner():
+        try:
+            await coro
+        except Exception as e:
+            logger.warning("background send failed: %s", e)
+    try:
+        asyncio.create_task(_runner())
+    except RuntimeError:
+        # No running loop (e.g. worker context) -> run inline as a fallback.
+        asyncio.run(_runner())
 
 
 def threshold() -> float:
@@ -97,13 +113,13 @@ async def assign_vendor(ticket: dict, vendor: dict, actor: str = "AI (auto-route
     await audit.log(ticket.get("society_id"), "vendor_assigned",
                     f"{vendor['name']} assigned to {ticket.get('ticket_number')} ({ticket.get('category')})",
                     actor=actor, category="vendor", ticket_number=ticket.get("ticket_number"))
-    await wa.send_buttons(
+    _fire(wa.send_buttons(
         vendor["phone"],
         f"New job: {ticket['category']} at Flat {ticket.get('flat','?')} ({ticket['priority']} priority). {ticket['description']}",
         [{"id": f"vendor_accept_{tid}", "title": "Accept"},
          {"id": f"vendor_reject_{tid}", "title": "Reject"},
          {"id": f"vendor_time_{tid}", "title": "Suggest Time"}],
-    )
+    ))
 
 
 async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, raw_text: str, ai_generated: bool,
