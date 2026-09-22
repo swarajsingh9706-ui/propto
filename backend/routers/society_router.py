@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from bson import ObjectId
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, date
+import calendar
 import io
 
 from db import db, COMPLAINT_CATEGORIES
@@ -26,6 +27,42 @@ def _sid(user):
 
 def _actor(user):
     return user.get("name") or user.get("email") or user.get("role", "admin")
+
+
+# ---------------- Asset scheduling helpers ----------------
+FREQ_MONTHS = {"Monthly": 1, "Two Months": 2, "Three Months": 3, "Six Months": 6, "Yearly": 12}
+
+
+def _parse_date(s):
+    try:
+        return date.fromisoformat(str(s)[:10])
+    except Exception:
+        return None
+
+
+def _add_months(d: date, months: int) -> date:
+    m = d.month - 1 + months
+    y = d.year + m // 12
+    m = m % 12 + 1
+    day = min(d.day, calendar.monthrange(y, m)[1])
+    return date(y, m, day)
+
+
+def _asset_status(a: dict) -> str:
+    ns = _parse_date(a.get("next_service"))
+    if not ns:
+        return "Unscheduled"
+    today = datetime.now(timezone.utc).date()
+    if ns < today:
+        return "Overdue"
+    if (ns - today).days <= 7:
+        return "Due Soon"
+    return "Scheduled"
+
+
+def _asset_clean(a: dict) -> dict:
+    a["status"] = _asset_status(a)
+    return _clean(a)
 
 
 async def _cascade_priorities(sid: str, priorities: dict, exclude_id: str = None):
@@ -77,7 +114,7 @@ async def dashboard(society_id: str = None, user: dict = Depends(require_society
         "open": await db.tickets.count_documents({**q, "status": "Open"}),
         "pending": await db.tickets.count_documents({**q, "status": "Pending"}),
         "resolved": await db.tickets.count_documents({**q, "status": "Resolved"}),
-        "escalated": await db.tickets.count_documents({**q, "status": "Escalated"}),
+        "escalated": await db.tickets.count_documents({**q, "$or": [{"status": "Escalated"}, {"status": {"$in": ["Open", "Pending"]}, "sla_due": {"$lt": now_str}}]}),
         "ai_generated": await db.tickets.count_documents({**q, "ai_generated": True}),
         "vendors": await db.vendors.count_documents(q),
         "residents": await db.residents.count_documents(q),
@@ -86,14 +123,19 @@ async def dashboard(society_id: str = None, user: dict = Depends(require_society
         "resolved_today": await db.tickets.count_documents({**q, "status": "Resolved", "updated_at": {"$gte": today_str}}),
     }
     recent = [_clean(t) for t in await db.tickets.find(q).sort("created_at", -1).limit(6).to_list(6)]
-    escalated = [_clean(t) for t in await db.tickets.find({**q, "status": "Escalated"}).sort("created_at", -1).limit(5).to_list(5)]
+    escalated = [_clean(t) for t in await db.tickets.find({**q, "$or": [{"status": "Escalated"}, {"status": {"$in": ["Open", "Pending"]}, "sla_due": {"$lt": now_str}}]}).sort("created_at", -1).limit(5).to_list(5)]
     cat_pipeline = [{"$match": q}, {"$group": {"_id": "$category", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
     by_category = [{"category": c["_id"], "count": c["count"]} async for c in db.tickets.aggregate(cat_pipeline)]
     status_dist = [
         {"status": s, "count": stats[k]} for s, k in
         [("Open", "open"), ("Pending", "pending"), ("Resolved", "resolved"), ("Escalated", "escalated")]
     ]
+    assets_all = await db.assets.find(q).to_list(500)
+    stats["assets"] = len(assets_all)
+    maintenance = sorted([a for a in assets_all if a.get("next_service")], key=lambda x: x.get("next_service") or "")[:5]
+    maintenance = [_asset_clean(a) for a in maintenance]
     return {"stats": stats, "recent": recent, "escalated": escalated,
+            "maintenance": maintenance,
             "by_category": by_category, "status_dist": status_dist}
 
 
@@ -290,7 +332,19 @@ async def list_assets(society_id: str = None, user: dict = Depends(require_socie
     sid = society_id or _sid(user)
     if not sid:
         raise HTTPException(status_code=400, detail="society_id required")
-    return [_clean(d) for d in await db.assets.find({"society_id": sid}).sort("created_at", -1).to_list(500)]
+    return [_asset_clean(d) for d in await db.assets.find({"society_id": sid}).sort("created_at", -1).to_list(500)]
+
+
+@router.get("/assets/tickets")
+async def list_asset_tickets(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    if not sid:
+        raise HTTPException(status_code=400, detail="society_id required")
+    return [_clean(t) for t in await db.tickets.find({"society_id": sid, "asset_id": {"$ne": None}}).sort("created_at", -1).to_list(500)]
+
+
+_ASSET_FIELDS = ["name", "type", "location", "next_service", "last_service",
+                 "service_frequency", "vendor_id", "vendor_name", "notes"]
 
 
 @router.post("/assets")
@@ -298,14 +352,95 @@ async def create_asset(body: dict, society_id: str = None, user: dict = Depends(
     sid = society_id or _sid(user)
     if not sid:
         raise HTTPException(status_code=400, detail="society_id required")
-    doc = {"society_id": sid, "name": (body.get("name") or "").strip(),
-           "type": (body.get("type") or "").strip(), "location": (body.get("location") or "").strip(),
-           "next_service": body.get("next_service") or "", "status": body.get("status") or "Scheduled",
-           "created_at": now_iso()}
+    doc = {"society_id": sid, "created_at": now_iso()}
+    for f in _ASSET_FIELDS:
+        doc[f] = (body.get(f) or "").strip() if isinstance(body.get(f), str) else body.get(f) or ""
     if not doc["name"]:
         raise HTTPException(status_code=400, detail="Asset name required")
     r = await db.assets.insert_one(doc)
     await audit.log(sid, "asset_added", f"Asset {doc['name']} ({doc['type'] or '—'}) added", actor=_actor(user), category="asset")
+    return _asset_clean({**doc, "_id": r.inserted_id})
+
+
+@router.put("/assets/{aid}")
+async def update_asset(aid: str, body: dict, user: dict = Depends(require_society_admin)):
+    updates = {f: body[f] for f in _ASSET_FIELDS if f in body}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    await db.assets.update_one({"_id": ObjectId(aid)}, {"$set": updates})
+    a = await db.assets.find_one({"_id": ObjectId(aid)})
+    await audit.log(a.get("society_id"), "asset_updated", f"Asset {a.get('name')} updated", actor=_actor(user), category="asset")
+    return _asset_clean(a)
+
+
+@router.post("/assets/{aid}/service-done")
+async def asset_service_done(aid: str, body: dict, user: dict = Depends(require_society_admin)):
+    a = await db.assets.find_one({"_id": ObjectId(aid)})
+    if not a:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    done = body.get("service_date") or datetime.now(timezone.utc).date().isoformat()
+    freq = body.get("service_frequency") or a.get("service_frequency")
+    upd = {"last_service": done, "last_alert_date": None}
+    if freq in FREQ_MONTHS:
+        base = _parse_date(done) or datetime.now(timezone.utc).date()
+        upd["next_service"] = _add_months(base, FREQ_MONTHS[freq]).isoformat()
+        upd["service_frequency"] = freq
+    elif body.get("next_service"):
+        upd["next_service"] = body["next_service"]
+    await db.assets.update_one({"_id": ObjectId(aid)}, {"$set": upd})
+    a = await db.assets.find_one({"_id": ObjectId(aid)})
+    await audit.log(a.get("society_id"), "asset_serviced",
+                    f"Service marked done for {a.get('name')} (next: {upd.get('next_service') or '—'})",
+                    actor=_actor(user), category="asset")
+    return _asset_clean(a)
+
+
+@router.post("/assets/{aid}/schedule")
+async def asset_schedule(aid: str, body: dict, user: dict = Depends(require_society_admin)):
+    upd = {"last_alert_date": None}
+    for f in ["next_service", "service_frequency", "vendor_id", "vendor_name"]:
+        if f in body:
+            upd[f] = body[f]
+    if upd.get("vendor_id") and not upd.get("vendor_name"):
+        v = await db.vendors.find_one({"_id": ObjectId(upd["vendor_id"])})
+        if v:
+            upd["vendor_name"] = v.get("name")
+    await db.assets.update_one({"_id": ObjectId(aid)}, {"$set": upd})
+    a = await db.assets.find_one({"_id": ObjectId(aid)})
+    await audit.log(a.get("society_id"), "asset_scheduled",
+                    f"Service scheduled for {a.get('name')} on {upd.get('next_service') or '—'}",
+                    actor=_actor(user), category="asset")
+    return _asset_clean(a)
+
+
+@router.post("/assets/{aid}/raise-ticket")
+async def asset_raise_ticket(aid: str, body: dict, user: dict = Depends(require_society_admin)):
+    a = await db.assets.find_one({"_id": ObjectId(aid)})
+    if not a:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    prio = body.get("priority") or "Medium"
+    hrs = pipeline.SLA_HOURS.get(prio, 24)
+    now = datetime.now(timezone.utc)
+    doc = {
+        "ticket_number": pipeline.gen_ticket_number(),
+        "society_id": a.get("society_id"),
+        "category": body.get("category") or a.get("type") or "Maintenance",
+        "sub_category": a.get("name"),
+        "description": body.get("description") or f"Service/maintenance required for {a.get('name')}",
+        "status": "Open", "priority": prio,
+        "flat": "", "tower": a.get("location") or "",
+        "resident_name": "Society (Asset)", "resident_phone": None,
+        "asset_id": aid, "asset_name": a.get("name"),
+        "source": "asset", "ai_generated": False,
+        "vendor_id": None, "vendor_name": None,
+        "sla_hours": hrs, "sla_due": (now + timedelta(hours=hrs)).isoformat(),
+        "timeline": [{"event": "Ticket Raised", "detail": f"Asset ticket for {a.get('name')}", "at": now_iso()}],
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    r = await db.tickets.insert_one(doc)
+    await audit.log(a.get("society_id"), "asset_ticket_raised",
+                    f"Ticket {doc['ticket_number']} raised for asset {a.get('name')}",
+                    actor=_actor(user), category="ticket", ticket_number=doc["ticket_number"])
     return _clean({**doc, "_id": r.inserted_id})
 
 
@@ -313,6 +448,30 @@ async def create_asset(body: dict, society_id: str = None, user: dict = Depends(
 async def delete_asset(aid: str, user: dict = Depends(require_society_admin)):
     await db.assets.delete_one({"_id": ObjectId(aid)})
     return {"status": "deleted"}
+
+
+# ---------------- Escalation Matrix (society-level, used for asset service alerts) ----------------
+@router.get("/escalation-matrix")
+async def get_escalation_matrix(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    soc = await db.societies.find_one({"_id": ObjectId(sid)})
+    return {"matrix": (soc or {}).get("escalation_matrix") or []}
+
+
+@router.put("/escalation-matrix")
+async def put_escalation_matrix(body: dict, society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    matrix = []
+    for m in (body.get("matrix") or []):
+        try:
+            wait = int(m.get("wait_minutes") or 0)
+        except (TypeError, ValueError):
+            wait = 0
+        matrix.append({"name": (m.get("name") or "").strip(), "phone": (m.get("phone") or "").strip(),
+                       "role": (m.get("role") or "").strip(), "wait_minutes": wait})
+    await db.societies.update_one({"_id": ObjectId(sid)}, {"$set": {"escalation_matrix": matrix}})
+    await audit.log(sid, "escalation_matrix_updated", f"Escalation matrix updated ({len(matrix)} levels)", actor=_actor(user), category="asset")
+    return {"matrix": matrix}
 
 
 # ---------------- Society Committee ----------------

@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Loader2, Wrench, Trash2, Phone } from "lucide-react";
+import { Plus, Loader2, Wrench, Trash2, Phone, Pencil } from "lucide-react";
 
 const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control"];
 
@@ -61,6 +61,35 @@ export default function Vendors() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState(empty);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEdit = (v) => {
+    const digits = (v.phone || "").replace(/\D/g, "");
+    const sorted = [...COUNTRY_CODES].sort((a, b) => b.dial.length - a.dial.length);
+    let dial = "91", number = digits;
+    for (const c of sorted) { if (digits.startsWith(c.dial)) { dial = c.dial; number = digits.slice(c.dial.length); break; } }
+    setEditForm({ name: v.name, dial, phone: number, categories: v.categories || [], priorities: { ...(v.priorities || {}) }, availability: v.availability, active: v.active });
+    setEditing(v);
+  };
+  const editToggleCat = (c) => setEditForm((f) => {
+    const has = f.categories.includes(c);
+    const categories = has ? f.categories.filter((x) => x !== c) : [...f.categories, c];
+    const priorities = { ...f.priorities };
+    if (has) delete priorities[c];
+    return { ...f, categories, priorities };
+  });
+  const saveEdit = async () => {
+    setSavingEdit(true);
+    try {
+      const num = (editForm.phone || "").replace(/\D/g, "");
+      const priorities = {};
+      Object.entries(editForm.priorities).forEach(([k, val]) => { const n = parseInt(val, 10); if (!isNaN(n) && n > 0) priorities[k] = n; });
+      await api.put(`/society/vendors/${editing.id}`, { name: editForm.name, phone: editForm.dial + num, categories: editForm.categories, availability: editForm.availability, active: editForm.active, priorities }, cfg);
+      toast.success("Vendor updated"); setEditing(null); reload();
+    } catch (e) { toast.error(apiError(e)); } finally { setSavingEdit(false); }
+  };
 
   const create = async () => {
     setSaving(true);
@@ -124,6 +153,7 @@ export default function Vendors() {
         <span className="hidden text-zinc-500 sm:inline">{v.resolved}/{v.assigned}</span>
         <label className="flex items-center gap-1.5"><span className="text-zinc-400">Avail</span><Switch data-testid={`vendor-avail-${v.id}`} checked={v.availability} onCheckedChange={(val) => update(v, { availability: val })} /></label>
         <label className="flex items-center gap-1.5"><span className="text-zinc-400">Active</span><Switch data-testid={`vendor-active-${v.id}`} checked={v.active} onCheckedChange={(val) => update(v, { active: val })} /></label>
+        <button data-testid={`edit-vendor-${v.id}`} onClick={() => openEdit(v)} className="text-zinc-400 hover:text-brand"><Pencil className="h-4 w-4" /></button>
         <button data-testid={`delete-vendor-${v.id}`} onClick={() => del(v)} className="text-zinc-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
       </div>
     </div>
@@ -214,6 +244,57 @@ export default function Vendors() {
           )}
         </div>
       )}
+
+      {/* Edit vendor dialog */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-cabinet">Edit Vendor</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label className="text-xs">Name</Label><Input data-testid="edit-vendor-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="mt-1" /></div>
+            <div>
+              <Label className="text-xs">Phone</Label>
+              <div className="mt-1 flex gap-2">
+                <Select value={editForm.dial} onValueChange={(v) => setEditForm({ ...editForm, dial: v })}>
+                  <SelectTrigger data-testid="edit-vendor-country-code" className="w-[150px] shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent className="max-h-64">{COUNTRY_CODES.map((c) => <SelectItem key={c.dial + c.label} value={c.dial}>{c.label}</SelectItem>)}</SelectContent>
+                </Select>
+                <Input data-testid="edit-vendor-phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="9000000001" className="flex-1" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Categories</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {CATEGORIES.map((c) => (
+                  <label key={c} className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={editForm.categories.includes(c)} onCheckedChange={() => editToggleCat(c)} data-testid={`edit-vendor-cat-${c}`} />
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor(c)}`}>{c}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {editForm.categories.length > 0 && (
+              <div>
+                <Label className="text-xs">Priority per category</Label>
+                <div className="mt-2 space-y-1.5">
+                  {editForm.categories.map((c) => (
+                    <div key={c} className="flex items-center justify-between gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor(c)}`}>{c}</span>
+                      <Input type="number" min="1" data-testid={`edit-vendor-priority-${c}`} value={editForm.priorities[c] ?? ""}
+                        onChange={(e) => setEditForm((f) => ({ ...f, priorities: { ...f.priorities, [c]: e.target.value } }))}
+                        placeholder="auto" className="h-8 w-24 text-xs" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm"><Switch checked={editForm.availability} onCheckedChange={(v) => setEditForm({ ...editForm, availability: v })} />Available</label>
+              <label className="flex items-center gap-2 text-sm"><Switch checked={editForm.active} onCheckedChange={(v) => setEditForm({ ...editForm, active: v })} />Active</label>
+            </div>
+          </div>
+          <DialogFooter><Button data-testid="save-edit-vendor-btn" onClick={saveEdit} disabled={savingEdit || !editForm.name || !editForm.phone}>{savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -305,3 +305,19 @@ AI-powered Society Complaint Management SaaS. Residents raise maintenance compla
 
 ## Perf: instant vendor assign (2026-06)
 - pipeline.assign_vendor() was blocking on await wa.send_buttons() (Whapi HTTP, 4-5s, worse on token timeout). DB update/timeline/audit are instant; the WhatsApp send now runs fire-and-forget via _fire() helper (asyncio.create_task with error logging; inline fallback when no loop). POST /society/tickets/:id/assign now returns in ~0.1s. Affects both Tickets and Escalated assignment sidebars (shared endpoint).
+
+## Assets overhaul + sidebar/dashboard/escalated/vendor edits (2026-06)
+SIDEBAR (Layout.jsx): re-styled to match HTML reference — order Dashboard, Tickets, Escalated Queue, Assignment Logic, Assets, Vendors, Residents, Society Committee, Analytics, Resident Suggestions, AI Activity, Notifications, Audit Log; icons updated (HardHat vendors, Lightbulb suggestions). Announcements intentionally skipped.
+VENDORS: added Edit dialog (name, phone+country code, categories, priorities, avail/active) -> PUT /society/vendors/:id.
+ESCALATED: added Status filter (All/Escalated/Open/Pending) alongside category/priority.
+DASHBOARD: wired real data — Assets summary count, Upcoming Maintenance table (from assets by next_service), Alerts (escalated tickets + asset due/overdue). Escalated stat + list now use broad query (status Escalated OR past-SLA Open/Pending) so they populate. Backend /society/dashboard returns stats.assets + maintenance[].
+ASSETS (full rebuild): 
+  - Tabs: All Assets | Asset Tickets (tickets with asset_id).
+  - Row actions dropdown: View Details, Edit, Mark Service Done, Schedule Service, Raise Ticket, Delete.
+  - Service frequency: Monthly/Two Months/Three Months/Six Months/Yearly. Mark-service-done auto-computes next_service = date + frequency (backend _add_months).
+  - Dynamic COMPUTED status (backend _asset_status): Overdue (past), Due Soon (<=7d), Scheduled (future), Unscheduled/"Not Scheduled" (no date). Not stored.
+  - Raise Ticket -> creates Open asset-ticket (manual assign), source="asset".
+  - Escalation Matrix (society-level, GET/PUT /society/escalation-matrix): ordered committee contacts + wait_minutes. Used by asset service alerts.
+AUTOMATED ALERTS: backend asset_alerts.run_asset_alerts() + POST /api/cron/asset-alerts (Bearer WEBHOOK_CRON_SECRET). Cron .emergent/crons.yml daily 09:00 Asia/Kolkata. Recipients = asset vendor + escalation matrix; if matrix empty -> vendor + Society Manager (committee Secretary/Manager/Chairman). Deduped via asset.last_alert_date == next_service. Verified: cron ran "1 message". Real WhatsApp delivery only on live VPS with valid Whapi tokens.
+NEW ENV: WEBHOOK_CRON_SECRET in backend/.env.
+ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed prod (OLD code, 404s new endpoints). All new code verified on local backend via curl; frontend compiles. Redeploy required for full UI e2e + live cron.

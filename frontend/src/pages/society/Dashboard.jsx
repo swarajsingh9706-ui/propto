@@ -32,7 +32,7 @@ export default function Dashboard() {
   }, []);
 
   if (loading || !data) return <Center />;
-  const { stats, recent, escalated } = data;
+  const { stats, recent, escalated, maintenance = [] } = data;
   const firstName = (user?.name || "there").split(" ")[0];
 
   return (
@@ -50,7 +50,7 @@ export default function Dashboard() {
           </div>
 
           <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-            <SummaryCard icon={Package} iconBg="#dcfce7" label="Assets" value="—" onClick={() => navigate("/tickets")} testid="summary-assets" />
+            <SummaryCard icon={Package} iconBg="#dcfce7" label="Assets" value={stats.assets ?? 0} onClick={() => navigate("/assets")} testid="summary-assets" />
             <SummaryCard icon={ClipboardList} iconBg="#dbeafe" label="Vendors" value={stats.vendors} onClick={() => navigate("/vendors")} testid="summary-vendors" />
           </div>
 
@@ -108,26 +108,56 @@ export default function Dashboard() {
           </Panel>
 
           <Panel testid="panel-maintenance" title="Upcoming Maintenance"
-            action={<span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">Coming soon</span>}>
-            <EmptyRow text="Asset maintenance scheduling arrives soon." />
+            action={<button data-testid="maintenance-viewall" onClick={() => navigate("/assets")} className="text-[12px] font-bold text-brand">View all</button>}>
+            {maintenance.length === 0 ? (
+              <EmptyRow text="No scheduled maintenance yet — add service dates on the Assets page." />
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[560px]">
+                <RowHead cols="1.5fr 1fr 1fr 1.1fr" items={["ASSET", "TYPE", "DUE DATE", "STATUS"]} />
+                {maintenance.map((a, i) => (
+                  <div key={a.id} className="grid items-center gap-2.5 border-b border-border px-[18px] py-3 last:border-0"
+                    style={{ gridTemplateColumns: "1.5fr 1fr 1fr 1.1fr", background: i % 2 ? "#f8fafc" : "#fff" }}>
+                    <div className="text-[13px] font-bold text-slate-900">{a.name}</div>
+                    <div className="text-[12px] text-slate-500">{a.type || "—"}</div>
+                    <div className="text-[12px] text-slate-700">{a.next_service || "—"}</div>
+                    <div><MaintBadge s={a.status} /></div>
+                  </div>
+                ))}
+                </div>
+              </div>
+            )}
           </Panel>
         </div>
 
         {/* RIGHT RAIL */}
         <div className="flex w-full flex-shrink-0 flex-col gap-3.5 xl:w-[300px]">
           <Panel testid="panel-alerts" title="Alerts"
-            action={<button onClick={() => navigate("/tickets")} className="text-[12px] font-bold text-brand">View all</button>}>
-            {escalated.length === 0 ? (
+            action={<button onClick={() => navigate("/notifications")} className="text-[12px] font-bold text-brand">View all</button>}>
+            {escalated.length === 0 && maintenance.filter((a) => ["Overdue", "Due Soon"].includes(a.status)).length === 0 ? (
               <div className="px-4 py-6 text-center text-[12px] text-slate-400">No active alerts</div>
-            ) : escalated.slice(0, 4).map((t) => (
-              <div key={t.id} className="flex items-start gap-2.5 border-b border-border px-4 py-2.5 last:border-0">
-                <AlertTriangle className="mt-0.5 h-[15px] w-[15px] flex-shrink-0 text-red-600" />
-                <div className="flex-1">
-                  <div className="text-[12px] font-bold text-red-600">Ticket {t.ticket_number?.slice(-6)} escalated</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500">{t.category} · {t.flat || "—"}</div>
-                </div>
-              </div>
-            ))}
+            ) : (
+              <>
+                {escalated.slice(0, 4).map((t) => (
+                  <div key={t.id} className="flex items-start gap-2.5 border-b border-border px-4 py-2.5 last:border-0">
+                    <AlertTriangle className="mt-0.5 h-[15px] w-[15px] flex-shrink-0 text-red-600" />
+                    <div className="flex-1">
+                      <div className="text-[12px] font-bold text-red-600">Ticket {t.ticket_number?.slice(-6)} needs action</div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">{t.category} · {t.flat || "—"}</div>
+                    </div>
+                  </div>
+                ))}
+                {maintenance.filter((a) => ["Overdue", "Due Soon"].includes(a.status)).slice(0, 3).map((a) => (
+                  <div key={a.id} className="flex items-start gap-2.5 border-b border-border px-4 py-2.5 last:border-0">
+                    <Package className={`mt-0.5 h-[15px] w-[15px] flex-shrink-0 ${a.status === "Overdue" ? "text-red-600" : "text-amber-600"}`} />
+                    <div className="flex-1">
+                      <div className={`text-[12px] font-bold ${a.status === "Overdue" ? "text-red-600" : "text-amber-600"}`}>Asset service {a.status === "Overdue" ? "overdue" : "due soon"}</div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">{a.name} · {a.next_service}</div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </Panel>
 
           <Panel testid="panel-suggestions" title="Resident Suggestions"
@@ -202,4 +232,12 @@ const RowHead = ({ cols, items }) => (
   </div>
 );
 const EmptyRow = ({ text }) => <div className="px-[18px] py-8 text-center text-[13px] text-slate-400">{text}</div>;
+const MAINT_BADGE = {
+  "Due Soon": ["#fffbeb", "#d97706"], Overdue: ["#fef2f2", "#dc2626"],
+  Scheduled: ["#dcfce7", "#16a34a"], Unscheduled: ["#f1f5f9", "#64748b"],
+};
+const MaintBadge = ({ s }) => {
+  const [bg, fg] = MAINT_BADGE[s] || MAINT_BADGE.Scheduled;
+  return <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: bg, color: fg }}>{s === "Unscheduled" ? "Not Scheduled" : s}</span>;
+};
 const Center = () => <div className="flex h-96 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;

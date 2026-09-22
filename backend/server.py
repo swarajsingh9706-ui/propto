@@ -21,6 +21,7 @@ from routers.reports_router import router as reports_router
 from routers.suggestions_router import router as suggestions_router
 from routers.public_router import router as public_router
 from routers.notifications_router import router as notifications_router
+from routers.cron_router import router as cron_router
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("propto")
 
@@ -46,6 +47,7 @@ app.include_router(reports_router)
 app.include_router(suggestions_router)
 app.include_router(public_router)
 app.include_router(notifications_router)
+app.include_router(cron_router)
 
 app.add_middleware(
     CORSMiddleware,

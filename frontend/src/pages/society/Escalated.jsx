@@ -36,6 +36,7 @@ export default function Escalated() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [priority, setPriority] = useState("all");
+  const [statusF, setStatusF] = useState("all");
   const [selected, setSelected] = useState(null);
   const [vendors, setVendors] = useState([]);
   const [pendingVendor, setPendingVendor] = useState("");
@@ -78,6 +79,7 @@ export default function Escalated() {
   const filtered = rows.filter((t) => {
     if (priority === "High" && t.priority !== "High") return false;
     if (category !== "all" && t.category !== category) return false;
+    if (statusF !== "all" && t.status !== statusF) return false;
     if (search) {
       const s = search.toLowerCase();
       return [t.ticket_number, t.flat, t.tower, t.resident_name, t.category, t.vendor_name].some((x) => (x || "").toLowerCase().includes(s));
@@ -107,6 +109,15 @@ export default function Escalated() {
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
             {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={statusF} onValueChange={setStatusF}>
+          <SelectTrigger data-testid="escalated-filter-status" className="w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="Escalated">Escalated</SelectItem>
+            <SelectItem value="Open">Open</SelectItem>
+            <SelectItem value="Pending">Pending</SelectItem>
           </SelectContent>
         </Select>
       </div>

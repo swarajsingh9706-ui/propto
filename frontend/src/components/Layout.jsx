@@ -3,9 +3,9 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, Ticket, Users, Wrench, Bot, Bell,
-  MessageSquare, BarChart3, Building2, LogOut, ChevronLeft, Vote, ScrollText,
-  Package, AlertTriangle, UsersRound, Workflow, Menu, X,
+  LayoutDashboard, Ticket, Users, HardHat, Bot, Bell,
+  MessageSquare, BarChart3, Building2, LogOut, ChevronLeft, Lightbulb, ScrollText,
+  Package, AlertTriangle, Workflow, Menu, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -18,17 +18,17 @@ const SUPER_NAV = [
 const SOCIETY_NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/tickets", label: "Tickets", icon: Ticket },
-  { to: "/escalated", label: "Escalated", icon: AlertTriangle },
-  { to: "/vendors", label: "Vendors", icon: Wrench },
+  { to: "/escalated", label: "Escalated Queue", icon: AlertTriangle },
+  { to: "/assignment-logic", label: "Assignment Logic", icon: Workflow },
   { to: "/assets", label: "Assets", icon: Package },
+  { to: "/vendors", label: "Vendors", icon: HardHat },
   { to: "/residents", label: "Residents", icon: Users },
-  { to: "/committee", label: "Committee", icon: UsersRound },
+  { to: "/committee", label: "Society Committee", icon: Building2 },
+  { to: "/reports", label: "Analytics", icon: BarChart3 },
+  { to: "/suggestions", label: "Resident Suggestions", icon: Lightbulb },
   { to: "/ai-activity", label: "AI Activity", icon: Bot },
   { to: "/notifications", label: "Notifications", icon: Bell },
-  { to: "/assignment-logic", label: "Assignment Logic", icon: Workflow },
-  { to: "/suggestions", label: "Suggestions", icon: Vote },
   { to: "/audit", label: "Audit Log", icon: ScrollText },
-  { to: "/reports", label: "Reports", icon: BarChart3 },
 ];
 
 export default function Layout({ children }) {
