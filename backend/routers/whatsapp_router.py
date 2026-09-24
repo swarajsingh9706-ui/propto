@@ -296,6 +296,28 @@ async def whapi_webhook_send(request: Request):
     return await _whapi_ingest(request, "send")
 
 
+# Signatures of messages PROPTO itself posts into the group. The reader account
+# sees these as normal group messages (they are not from_me on the reader), so we
+# must skip them — otherwise our own acknowledgement gets re-classified as a new
+# complaint and triggers a duplicate "already tracked" reply (feedback loop).
+_BOT_MARKERS = (
+    "we've logged your complaint",
+    "this is already tracked under ticket",
+    "will be assigned shortly",
+    "has been resolved",
+    "propto is connected",
+    "assigned to: society manager",
+    "as *resolved*",
+    "we'd love your feedback",
+    "please share feedback",
+)
+
+
+def _is_bot_echo(text: str) -> bool:
+    t = (text or "").lower()
+    return any(mk in t for mk in _BOT_MARKERS)
+
+
 async def process_whapi(payload: dict, method: str = "POST", role: str = "read"):
     try:
         logger.info("Whapi RAW [%s/%s]: %s", method, role, json.dumps(payload)[:2500])
@@ -336,6 +358,9 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
             if m.get("button_id"):
                 await _handle_button(sid, m["from"], m["button_id"])
             elif group_chat_id and m.get("text"):
+                if _is_bot_echo(m["text"]):
+                    logger.info("Whapi: skipping PROPTO's own group message (echo): %.60s", m["text"])
+                    continue
                 # group message -> AI complaint pipeline; replies go back into the group, quoting the original
                 await pipeline.process_message(sid, m["from"], m["text"], group_chat_id=group_chat_id, reply_to=m.get("id"))
             elif m.get("text"):
