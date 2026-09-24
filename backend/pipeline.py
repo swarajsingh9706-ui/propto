@@ -185,7 +185,7 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
             assigned_line = "A vendor will be assigned shortly."
     who = (resident["name"] + ", " if resident else "")
     confirm_msg = (
-        f"✅ {who}we've logged your {doc.get('sub_category') or doc['category']} complaint.\n"
+        f"✅ {who}we've logged your complaint: {doc.get('description') or doc['category']}\n"
         f"Ticket: {doc['ticket_number']}\n"
         f"Flat: {doc['flat'] or '—'}  |  Priority: {doc['priority']}\n"
         + assigned_line
