@@ -3,7 +3,7 @@ from difflib import SequenceMatcher
 
 logger = logging.getLogger("propto.kb")
 _CACHE = os.path.join(os.path.dirname(__file__), "data", "taxonomy.json")
-_XLSX = "https://customer-assets-lxgj4vgw.emergentagent.net/job_complaint-whatsapp/artifacts/yva2bhy3_Propto_Taxonomy_Corrected.xlsx"
+_XLSX = "https://customer-assets-lxgj4vgw.emergentagent.net/job_complaint-whatsapp/artifacts/jvybzgi9_Propto_Taxonomy.xlsx"
 _SHEET = "Issue Taxonomy"
 _ITEMS = None
 _STOP = {"the", "a", "an", "is", "in", "my", "of", "to", "and", "for", "on", "at",
