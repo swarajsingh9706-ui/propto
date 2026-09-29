@@ -36,9 +36,18 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [societyName, setSocietyName] = useState(null);
   const isSuper = user?.role === "super_admin";
   const scoped = isSuper && scopeSociety;
   const nav = isSuper && !scoped ? SUPER_NAV : SOCIETY_NAV;
+
+  useEffect(() => {
+    if (!scoped) { setSocietyName(user?.society_name || null); return; }
+    api.get("/super/societies").then((r) => {
+      const s = (r.data || []).find((x) => x.id === scopeSociety || x._id === scopeSociety);
+      setSocietyName(s?.name || null);
+    }).catch(() => setSocietyName(null));
+  }, [scoped, scopeSociety, user]);
 
   useEffect(() => {
     if (isSuper && !scoped) return;
@@ -67,8 +76,14 @@ export default function Layout({ children }) {
         <div className="relative border-b border-border px-6 py-5">
           <img src="/propto-logo.png" alt="Propto" className="mx-auto h-20 w-auto object-contain" />
           <p className="mt-1 text-center text-[10px] uppercase tracking-[0.25em] text-brand-gold">
-            {isSuper ? "Control Tower" : "Society Portal"}
+            {isSuper && !scoped ? "Control Tower" : "Society Portal"}
           </p>
+          {societyName && (
+            <div data-testid="sidebar-society-name" className="mx-auto mt-3 flex items-center justify-center gap-1.5 rounded-lg border border-brand-green/20 bg-brand-green/[0.07] px-3 py-2">
+              <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-brand-green" />
+              <span className="truncate text-center text-[13px] font-bold text-brand-green">{societyName}</span>
+            </div>
+          )}
           <button data-testid="sidebar-close" onClick={() => setOpen(false)} className="absolute right-3 top-3 rounded-md p-1 text-zinc-400 hover:bg-secondary lg:hidden">
             <X className="h-5 w-5" />
           </button>
@@ -125,6 +140,11 @@ export default function Layout({ children }) {
           <Menu className="h-5 w-5" />
         </button>
         <img src="/propto-logo.png" alt="Propto" className="h-8 w-auto object-contain" />
+        {societyName && (
+          <span data-testid="topbar-society-name" className="ml-auto flex items-center gap-1 truncate rounded-md bg-brand-green/[0.08] px-2 py-1 text-[12px] font-bold text-brand-green">
+            <Building2 className="h-3.5 w-3.5 flex-shrink-0" />{societyName}
+          </span>
+        )}
       </div>
 
       <main className="bg-background lg:ml-60">{children}</main>

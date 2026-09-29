@@ -9,13 +9,22 @@ from auth_utils import verify_password, create_access_token, get_current_user
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _public(user: dict) -> dict:
+async def _public(user: dict) -> dict:
+    society_name = None
+    sid = user.get("society_id")
+    if sid:
+        try:
+            s = await db.societies.find_one({"_id": ObjectId(sid)}, {"name": 1})
+            society_name = (s or {}).get("name")
+        except Exception:
+            society_name = None
     return {
         "id": str(user["_id"]) if user.get("_id") else user.get("id"),
         "email": user["email"],
         "name": user.get("name", ""),
         "role": user["role"],
-        "society_id": user.get("society_id"),
+        "society_id": sid,
+        "society_name": society_name,
     }
 
 
@@ -27,7 +36,7 @@ async def login(body: LoginRequest, response: Response):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token(str(user["_id"]), email, user["role"])
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
-    return {"token": token, "user": _public(user)}
+    return {"token": token, "user": await _public(user)}
 
 
 @router.post("/logout")
@@ -38,10 +47,4 @@ async def logout(response: Response):
 
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
-    return {
-        "id": user["id"],
-        "email": user["email"],
-        "name": user.get("name", ""),
-        "role": user["role"],
-        "society_id": user.get("society_id"),
-    }
+    return await _public(user)
