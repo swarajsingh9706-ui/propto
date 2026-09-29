@@ -5,6 +5,7 @@ import os
 import asyncio
 import logging
 import json
+import re
 import uuid
 
 from db import db
@@ -326,7 +327,7 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
     try:
         logger.info("Whapi RAW [%s/%s]: %s", method, role, json.dumps(payload)[:2500])
         messages = wa.parse_whapi_inbound(payload)
-        logger.info("Whapi[%s] parsed %d msg(s): %s", role, len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id")} for m in messages])
+        logger.info("Whapi[%s] parsed %d msg(s): %s", role, len(messages), [{"from": m.get("from"), "type": m.get("type"), "btn": m.get("button_id"), "poll": bool(m.get("poll")), "id": m.get("id"), "quoted": m.get("quoted_id"), "text": (m.get("text") or "")[:30]} for m in messages])
         for m in messages:
             if m.get("type") == "poll" or m.get("poll"):
                 if m.get("poll_fetch_id") and not (m.get("poll") or {}).get("results"):
@@ -363,8 +364,8 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
                 await _handle_button(sid, m["from"], m["button_id"])
             elif group_chat_id and m.get("text"):
                 # Reply "CANCEL" (exact caps) quoting the ticket -> cancel it (creator or manager only).
-                if m["text"].strip() == "CANCEL" and m.get("quoted_id"):
-                    await _handle_cancel(sid, m["from"], m["quoted_id"], group_chat_id, m.get("id"))
+                if m["text"].strip() == "CANCEL" and (m.get("quoted_id") or m.get("quoted_body")):
+                    await _handle_cancel(sid, m["from"], m.get("quoted_id"), group_chat_id, m.get("id"), m.get("quoted_body"))
                     continue
                 if _is_bot_echo(m["text"]):
                     logger.info("Whapi: skipping PROPTO's own group message (echo): %.60s", m["text"])
@@ -386,11 +387,19 @@ async def _is_society_manager(society_id: str, phone: str) -> bool:
     return bool(m)
 
 
-async def _handle_cancel(society_id: str, phone: str, quoted_id: str, group_chat_id: str, reply_to: str):
-    """Cancel a ticket when the creator or society manager replies 'CANCEL' to it."""
-    ticket = await db.tickets.find_one({"society_id": society_id, "$or": [{"source_message_id": quoted_id}, {"ack_message_id": quoted_id}]})
+async def _handle_cancel(society_id: str, phone: str, quoted_id: str, group_chat_id: str, reply_to: str, quoted_body: str = ""):
+    """Cancel a ticket when the creator or society manager replies 'CANCEL' to it.
+    Matches by the quoted message id (source complaint or PROPTO ack) and, as a
+    fallback, by a TKT-XXXXXX-XXXXX number found in the quoted acknowledgement text."""
+    ticket = None
+    if quoted_id:
+        ticket = await db.tickets.find_one({"society_id": society_id, "$or": [{"source_message_id": quoted_id}, {"ack_message_id": quoted_id}]})
+    if not ticket and quoted_body:
+        mnum = re.search(r"TKT-\d{6}-[A-Z0-9]{4,6}", quoted_body.upper())
+        if mnum:
+            ticket = await db.tickets.find_one({"society_id": society_id, "ticket_number": mnum.group(0)})
+    logger.info("CANCEL from=%s quoted_id=%s body=%.50s -> ticket=%s", phone, quoted_id, quoted_body, ticket.get("ticket_number") if ticket else None)
     if not ticket:
-        logger.info("CANCEL reply not linked to any ticket (quoted_id=%s)", quoted_id)
         return
     tnum = ticket.get("ticket_number")
     if ticket.get("status") == "Cancelled":

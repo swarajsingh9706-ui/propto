@@ -330,3 +330,10 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Cancel/rejection phrases added to _BOT_MARKERS so they aren't re-ingested (no loop).
 - Verified via reader webhook: unauthorized rejected (stayed Open); creator via ack msg -> Cancelled(resident); manager via original msg -> Cancelled(Society Manager); audit+timeline written.
 - NOTE: requires a real WhatsApp *reply* (quote); a plain "CANCEL" without quoting does nothing. Live delivery needs Whapi tokens on VPS.
+
+## CANCEL robustness fix (2026-06)
+- Confirmed Whapi uses context.quoted_id (correct). Root cause of "no effect": old tickets had no source_message_id/ack_message_id, so id-match failed silently.
+- Added fallback: capture context.quoted_content.body (quoted_body); if id match fails, extract TKT-YYMMDD-XXXXX from the quoted ack text and match by ticket_number -> works for ANY ticket when replying to the acknowledgement.
+- Added logging: parsed msgs now log quoted_id + text preview; _handle_cancel logs "CANCEL from=.. quoted_id=.. -> ticket=..".
+- Verified: reply-to-ack with unmatched id but ticket number in body -> ticket Cancelled.
+- Reminder: replying to the ORIGINAL complaint only matches NEW tickets (source_message_id); replying to the ACK works for all. Requires production redeploy.
