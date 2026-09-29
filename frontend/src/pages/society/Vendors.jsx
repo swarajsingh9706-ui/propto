@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { toast } from "sonner";
 import { Plus, Loader2, Wrench, Trash2, Phone, Pencil } from "lucide-react";
 
-const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control"];
+const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control", "AC Service Vendor", "Accountant", "DG Vendor", "Facility Manager", "Pool AMC Vendor", "Solar Vendor", "Tech Support"];
 
 const CATEGORY_COLORS = {
   Plumbing: "bg-blue-100 text-blue-700 border-blue-200",
@@ -26,12 +26,22 @@ const CATEGORY_COLORS = {
   "Water Supply": "bg-sky-100 text-sky-700 border-sky-200",
   "DG Set": "bg-yellow-100 text-yellow-700 border-yellow-200",
   "Pest Control": "bg-pink-100 text-pink-700 border-pink-200",
+  "AC Service Vendor": "bg-teal-100 text-teal-700 border-teal-200",
+  Accountant: "bg-slate-100 text-slate-700 border-slate-200",
+  "DG Vendor": "bg-lime-100 text-lime-700 border-lime-200",
+  "Facility Manager": "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "Pool AMC Vendor": "bg-blue-100 text-blue-700 border-blue-200",
+  "Solar Vendor": "bg-orange-100 text-orange-700 border-orange-200",
+  "Tech Support": "bg-violet-100 text-violet-700 border-violet-200",
 };
 const catColor = (c) => CATEGORY_COLORS[c] || "bg-secondary text-zinc-600 border-border";
 const catDot = (c) => ({
   Plumbing: "#2563eb", Electrical: "#d97706", Lift: "#7c3aed", Security: "#dc2626",
   Housekeeping: "#059669", Civil: "#ea580c", Parking: "#0891b2", Gardening: "#16a34a",
   "Water Supply": "#0284c7", "DG Set": "#ca8a04", "Pest Control": "#db2777",
+  "AC Service Vendor": "#0d9488", Accountant: "#475569", "DG Vendor": "#65a30d",
+  "Facility Manager": "#4f46e5", "Pool AMC Vendor": "#2563eb", "Solar Vendor": "#ea580c",
+  "Tech Support": "#7c3aed",
 }[c] || "#64748b");
 
 const COUNTRY_CODES = [
