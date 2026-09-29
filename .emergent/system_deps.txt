@@ -1,1 +1,1 @@
-redis-server=5:7.0.15-1~deb12u9
+redis-server=5:7.0.15-1~deb12u10

@@ -303,7 +303,7 @@ async def whapi_webhook_send(request: Request):
 _BOT_MARKERS = (
     "we've logged your complaint",
     "this is already tracked under ticket",
-    "will be assigned shortly",
+    "will be assigned to concern vendor",
     "has been resolved",
     "propto is connected",
     "assigned to: society manager",

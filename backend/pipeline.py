@@ -182,7 +182,7 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
             await assign_vendor(doc, vendor)
             assigned_line = f"Assigned to: {vendor['name']}. They'll reach out shortly."
         else:
-            assigned_line = "A vendor will be assigned shortly."
+            assigned_line = "Ticket will be assigned to concern vendor or society manager."
     who = (resident["name"] + ", " if resident else "")
     confirm_msg = (
         f"✅ {who}we've logged your complaint: {doc.get('description') or doc['category']}\n"
