@@ -363,8 +363,8 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
             if m.get("button_id"):
                 await _handle_button(sid, m["from"], m["button_id"])
             elif group_chat_id and m.get("text"):
-                # Reply "CANCEL" (exact caps) quoting the ticket -> cancel it (creator or manager only).
-                if m["text"].strip() == "CANCEL" and (m.get("quoted_id") or m.get("quoted_body")):
+                # Reply "cancel" (any case) quoting the ticket -> cancel it (creator or manager only).
+                if m["text"].strip().upper() == "CANCEL" and (m.get("quoted_id") or m.get("quoted_body")):
                     await _handle_cancel(sid, m["from"], m.get("quoted_id"), group_chat_id, m.get("id"), m.get("quoted_body"))
                     continue
                 if _is_bot_echo(m["text"]):
@@ -418,6 +418,15 @@ async def _handle_cancel(society_id: str, phone: str, quoted_id: str, group_chat
     await pipeline.add_timeline(str(ticket["_id"]), "Ticket Cancelled", f"Cancelled via WhatsApp by {by} ({phone})")
     await audit.log(society_id, "ticket_cancelled", f"{tnum} cancelled by {by} ({phone})", actor=phone, category="ticket", ticket_number=tnum)
     await wa.send_text(group_chat_id, f"❌ Ticket {tnum} has been *cancelled* as requested. No further action will be taken.", reply_to=reply_to)
+    # Notify the assigned vendor (if any) that the job is off.
+    vid = ticket.get("vendor_id")
+    if vid:
+        try:
+            v = await db.vendors.find_one({"_id": ObjectId(vid)})
+            if v and v.get("phone"):
+                await wa.send_text(v["phone"], f"⚠️ Ticket {tnum} ({ticket.get('category') or 'Issue'} · Flat {ticket.get('flat') or '—'}) has been CANCELLED. No action is required — please disregard this job.")
+        except Exception as e:
+            logger.warning("vendor cancel notice failed: %s", e)
 
 
 async def _handle_direct_reply(society_id: str, phone: str, text: str):
