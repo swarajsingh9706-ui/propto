@@ -292,6 +292,7 @@ def parse_whapi_inbound(payload: dict):
                 "text": "",
                 "button_id": None,
                 "from_me": bool(msg.get("from_me")),
+                "quoted_id": (msg.get("context") or {}).get("quoted_id"),
             }
             act0 = msg.get("action") or {}
             is_vote = mtype == "action" and act0.get("type") == "vote"

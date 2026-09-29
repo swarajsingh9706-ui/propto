@@ -310,6 +310,10 @@ _BOT_MARKERS = (
     "as *resolved*",
     "we'd love your feedback",
     "please share feedback",
+    "has been *cancelled*",
+    "can cancel it",
+    "already cancelled",
+    "can't be cancelled",
 )
 
 
@@ -358,6 +362,10 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
             if m.get("button_id"):
                 await _handle_button(sid, m["from"], m["button_id"])
             elif group_chat_id and m.get("text"):
+                # Reply "CANCEL" (exact caps) quoting the ticket -> cancel it (creator or manager only).
+                if m["text"].strip() == "CANCEL" and m.get("quoted_id"):
+                    await _handle_cancel(sid, m["from"], m["quoted_id"], group_chat_id, m.get("id"))
+                    continue
                 if _is_bot_echo(m["text"]):
                     logger.info("Whapi: skipping PROPTO's own group message (echo): %.60s", m["text"])
                     continue
@@ -368,6 +376,39 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
                 await _handle_direct_reply(sid, m["from"], m["text"])
     except Exception as e:
         logger.exception("Whapi webhook processing failed: %s", e)
+
+
+async def _is_society_manager(society_id: str, phone: str) -> bool:
+    p10 = (phone or "")[-10:]
+    if not p10:
+        return False
+    m = await db.committee.find_one({"society_id": society_id, "role": {"$in": ["Secretary", "Manager", "Chairman"]}, "phone": {"$regex": p10 + "$"}})
+    return bool(m)
+
+
+async def _handle_cancel(society_id: str, phone: str, quoted_id: str, group_chat_id: str, reply_to: str):
+    """Cancel a ticket when the creator or society manager replies 'CANCEL' to it."""
+    ticket = await db.tickets.find_one({"society_id": society_id, "$or": [{"source_message_id": quoted_id}, {"ack_message_id": quoted_id}]})
+    if not ticket:
+        logger.info("CANCEL reply not linked to any ticket (quoted_id=%s)", quoted_id)
+        return
+    tnum = ticket.get("ticket_number")
+    if ticket.get("status") == "Cancelled":
+        await wa.send_text(group_chat_id, f"Ticket {tnum} is already cancelled.", reply_to=reply_to); return
+    if ticket.get("status") == "Resolved":
+        await wa.send_text(group_chat_id, f"Ticket {tnum} is already resolved and can't be cancelled.", reply_to=reply_to); return
+    p10 = (phone or "")[-10:]
+    rp = ticket.get("reporter_phone") or ""
+    is_creator = bool(p10) and rp.endswith(p10)
+    is_manager = await _is_society_manager(society_id, phone)
+    if not (is_creator or is_manager):
+        await wa.send_text(group_chat_id, "Only the resident who raised this ticket or the society manager can cancel it.", reply_to=reply_to)
+        return
+    by = "Society Manager" if (is_manager and not is_creator) else "resident"
+    await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Cancelled", "cancelled_by": by, "updated_at": now_iso()}})
+    await pipeline.add_timeline(str(ticket["_id"]), "Ticket Cancelled", f"Cancelled via WhatsApp by {by} ({phone})")
+    await audit.log(society_id, "ticket_cancelled", f"{tnum} cancelled by {by} ({phone})", actor=phone, category="ticket", ticket_number=tnum)
+    await wa.send_text(group_chat_id, f"❌ Ticket {tnum} has been *cancelled* as requested. No further action will be taken.", reply_to=reply_to)
 
 
 async def _handle_direct_reply(society_id: str, phone: str, text: str):

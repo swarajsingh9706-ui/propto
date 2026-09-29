@@ -321,3 +321,12 @@ ASSETS (full rebuild):
 AUTOMATED ALERTS: backend asset_alerts.run_asset_alerts() + POST /api/cron/asset-alerts (Bearer WEBHOOK_CRON_SECRET). Cron .emergent/crons.yml daily 09:00 Asia/Kolkata. Recipients = asset vendor + escalation matrix; if matrix empty -> vendor + Society Manager (committee Secretary/Manager/Chairman). Deduped via asset.last_alert_date == next_service. Verified: cron ran "1 message". Real WhatsApp delivery only on live VPS with valid Whapi tokens.
 NEW ENV: WEBHOOK_CRON_SECRET in backend/.env.
 ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed prod (OLD code, 404s new endpoints). All new code verified on local backend via curl; frontend compiles. Redeploy required for full UI e2e + live cron.
+
+## WhatsApp ticket cancellation via reply "CANCEL" (2026-06)
+- Residents/manager can cancel a ticket by REPLYING (swipe/hold-reply, quoting) to either the original complaint OR PROPTO's acknowledgement, sending exactly "CANCEL" (uppercase).
+- Parsing: whatsapp_client.parse_whapi_inbound now captures context.quoted_id per message.
+- Ticket now stores reporter_phone, source_message_id (original group msg id), ack_message_id (id of PROPTO's ack, extracted via _extract_msg_id from send_text response).
+- Handler routers/whatsapp_router._handle_cancel: matches ticket by quoted_id (source_message_id OR ack_message_id); AUTH = creator (reporter_phone last-10 match) OR society manager (committee role Secretary/Manager/Chairman, phone match); others get "Only the resident who raised this ticket or the society manager can cancel it." Sets status=Cancelled + cancelled_by, timeline, audit; replies "❌ Ticket X has been *cancelled* as requested.". Already-cancelled/resolved handled.
+- Cancel/rejection phrases added to _BOT_MARKERS so they aren't re-ingested (no loop).
+- Verified via reader webhook: unauthorized rejected (stayed Open); creator via ack msg -> Cancelled(resident); manager via original msg -> Cancelled(Society Manager); audit+timeline written.
+- NOTE: requires a real WhatsApp *reply* (quote); a plain "CANCEL" without quoting does nothing. Live delivery needs Whapi tokens on VPS.

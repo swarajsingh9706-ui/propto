@@ -122,8 +122,22 @@ async def assign_vendor(ticket: dict, vendor: dict, actor: str = "AI (auto-route
     ))
 
 
+def _extract_msg_id(res):
+    if not isinstance(res, dict):
+        return None
+    if res.get("id"):
+        return res["id"]
+    msg = res.get("message") or {}
+    if isinstance(msg, dict) and msg.get("id"):
+        return msg["id"]
+    msgs = res.get("messages")
+    if isinstance(msgs, list) and msgs and isinstance(msgs[0], dict):
+        return msgs[0].get("id")
+    return None
+
+
 async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, raw_text: str, ai_generated: bool,
-                        notify_to: str = None, notify_reply_to: str = None):
+                        notify_to: str = None, notify_reply_to: str = None, reporter_phone: str = None):
     doc = {
         "ticket_number": gen_ticket_number(),
         "society_id": society_id,
@@ -149,6 +163,8 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
         "handled_by": ai.get("handled_by") or "",
         "vendor_required": ai.get("vendor_required") or "",
         "raw_message": raw_text,
+        "reporter_phone": reporter_phone or (resident.get("phone") if resident else None),
+        "source_message_id": notify_reply_to,
         "sla_hours": SLA_HOURS.get(ai.get("priority") or "Medium", 24),
         "created_at": now_iso(),
         "updated_at": now_iso(),
@@ -192,10 +208,14 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
     )
     # Prefer replying in the group (quoting the original message); else private 1:1 to resident.
     try:
+        res = None
         if notify_to:
-            await wa.send_text(notify_to, confirm_msg, reply_to=notify_reply_to)
+            res = await wa.send_text(notify_to, confirm_msg, reply_to=notify_reply_to)
         elif resident and resident.get("phone"):
-            await wa.send_text(resident["phone"], confirm_msg)
+            res = await wa.send_text(resident["phone"], confirm_msg)
+        ack_id = _extract_msg_id(res)
+        if ack_id:
+            await db.tickets.update_one({"_id": doc["_id"]}, {"$set": {"ack_message_id": ack_id}})
     except Exception as e:
         logger.warning("confirmation send failed: %s", e)
     return doc
@@ -259,7 +279,7 @@ async def process_message(society_id: str, phone: str, text: str, group_chat_id:
             return {"status": "duplicate", "ticket_number": dup["ticket_number"], "ai": ai}
 
         ticket = await create_ticket(society_id, ai, resident, "whatsapp", text, ai_generated=True,
-                                     notify_to=reply_target, notify_reply_to=quote)
+                                     notify_to=reply_target, notify_reply_to=quote, reporter_phone=phone)
         await log_activity(society_id, phone, text, "ticket_created", ai=ai, ticket_number=ticket["ticket_number"])
         return {"status": "ticket_created", "ticket_number": ticket["ticket_number"], "ai": ai}
 
