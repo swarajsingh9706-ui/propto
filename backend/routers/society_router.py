@@ -474,6 +474,25 @@ async def put_escalation_matrix(body: dict, society_id: str = None, user: dict =
     return {"matrix": matrix}
 
 
+# ---------------- Routing mode (all complaints -> Society Manager) ----------------
+@router.get("/routing-mode")
+async def get_routing_mode(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    s = await db.societies.find_one({"_id": ObjectId(sid)})
+    return {"manager_only_routing": (s or {}).get("manager_only_routing", True)}
+
+
+@router.put("/routing-mode")
+async def set_routing_mode(body: dict, society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    val = bool(body.get("manager_only_routing"))
+    await db.societies.update_one({"_id": ObjectId(sid)}, {"$set": {"manager_only_routing": val}})
+    await audit.log(sid, "routing_mode_changed",
+                    f"Vendor routing {'DISABLED — all complaints go to Society Manager' if val else 'ENABLED — complaints auto-route to vendors'}",
+                    actor=_actor(user), category="society")
+    return {"manager_only_routing": val}
+
+
 # ---------------- Society Committee ----------------
 @router.get("/committee")
 async def list_committee(society_id: str = None, user: dict = Depends(require_society_admin)):

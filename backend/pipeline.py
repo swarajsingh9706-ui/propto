@@ -180,9 +180,11 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
     # Route based on the taxonomy "Handled By". Society Manager issues stay in-house;
     # everything else auto-routes to a matching vendor.
     tid = str(doc["_id"])
+    soc = await db.societies.find_one({"_id": ObjectId(society_id)})
+    manager_only = (soc or {}).get("manager_only_routing", True)
     handled_by = doc["handled_by"]
     vendor = None
-    if handled_by == "Society Manager":
+    if manager_only or handled_by == "Society Manager":
         await db.tickets.update_one({"_id": doc["_id"]}, {"$set": {"status": "Pending", "assigned_to": "Society Manager", "updated_at": now_iso()}})
         doc["status"] = "Pending"
         doc["assigned_to"] = "Society Manager"

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api, { apiError } from "@/lib/api";
 import { useScope, useFetch } from "@/lib/useScope";
 import { PageHeader } from "@/components/Layout";
@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Loader2, Wrench, Trash2, Phone, Pencil } from "lucide-react";
+import { Plus, Loader2, Wrench, Trash2, Phone, Pencil, ShieldCheck } from "lucide-react";
 
 const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control", "AC Service Vendor", "Accountant", "DG Vendor", "Facility Manager", "Pool AMC Vendor", "Solar Vendor", "Tech Support"];
 
@@ -74,6 +74,20 @@ export default function Vendors() {
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState(empty);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [managerOnly, setManagerOnly] = useState(null);
+
+  useEffect(() => {
+    api.get("/society/routing-mode", cfg).then((r) => setManagerOnly(r.data.manager_only_routing)).catch(() => {});
+    // eslint-disable-next-line
+  }, [cfg.params?.society_id]);
+  const toggleRouting = async () => {
+    const next = !managerOnly;
+    setManagerOnly(next);
+    try {
+      await api.put("/society/routing-mode", { manager_only_routing: next }, cfg);
+      toast.success(next ? "All complaints will now go to the Society Manager" : "Vendor auto-routing re-enabled");
+    } catch (e) { toast.error(apiError(e)); setManagerOnly(!next); }
+  };
 
   const openEdit = (v) => {
     const digits = (v.phone || "").replace(/\D/g, "");
@@ -172,6 +186,15 @@ export default function Vendors() {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Vendor Management" subtitle="Vendors">
+        <button
+          data-testid="routing-mode-toggle"
+          onClick={toggleRouting}
+          className={`flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold transition-colors ${
+            managerOnly ? "border-amber-300 bg-amber-100 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-700"}`}
+        >
+          <ShieldCheck className="h-4 w-4" />
+          {managerOnly === null ? "…" : managerOnly ? "All → Society Manager: ON" : "Vendor Routing: ON"}
+        </button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button data-testid="add-vendor-btn"><Plus className="mr-1.5 h-4 w-4" />Add Vendor</Button></DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -223,6 +246,15 @@ export default function Vendors() {
           </DialogContent>
         </Dialog>
       </PageHeader>
+
+      {managerOnly && (
+        <div data-testid="routing-mode-banner" className="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+          <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+          <p className="text-[13px] text-amber-800">
+            <b>Vendor auto-routing is OFF.</b> All new complaints are being assigned to the <b>Society Manager</b> (handled in-house). Turn off the toggle above to route complaints to vendors by category/priority.
+          </p>
+        </div>
+      )}
 
       {loading ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400" /> : all.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-sm text-zinc-400"><Wrench className="mx-auto mb-3 h-8 w-8 text-zinc-300" />No vendors yet.</div>

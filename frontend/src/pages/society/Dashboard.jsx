@@ -57,7 +57,7 @@ export default function Dashboard() {
           <Panel testid="panel-escalated" danger
             title="Escalated Tickets"
             icon={<AlertTriangle className="h-4 w-4 text-red-600" />}
-            action={<button data-testid="escalated-viewall" onClick={() => navigate("/tickets")} className="text-[12px] font-bold text-brand">View all</button>}>
+            action={<button data-testid="escalated-viewall" onClick={() => navigate("/escalated")} className="text-[12px] font-bold text-brand">View all</button>}>
             {escalated.length === 0 ? (
               <EmptyRow text="No escalated tickets — everything is under control." />
             ) : (
@@ -72,7 +72,7 @@ export default function Dashboard() {
                     <div className="text-[12px] text-slate-500">{t.flat || "—"}</div>
                     <div className="truncate text-[12px] text-slate-500">{t.resident_name || "—"}</div>
                     <SLABar createdAt={t.created_at} slaHours={t.sla_hours} />
-                    <button data-testid={`assign-now-${t.id}`} onClick={() => navigate("/tickets")}
+                    <button data-testid={`assign-now-${t.id}`} onClick={() => navigate("/escalated")}
                       className="whitespace-nowrap rounded-[7px] bg-brand px-3 py-1.5 text-[11px] font-bold text-white hover:opacity-90">
                       Assign Now →
                     </button>

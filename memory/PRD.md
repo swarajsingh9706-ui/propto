@@ -337,3 +337,11 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Added logging: parsed msgs now log quoted_id + text preview; _handle_cancel logs "CANCEL from=.. quoted_id=.. -> ticket=..".
 - Verified: reply-to-ack with unmatched id but ticket number in body -> ticket Cancelled.
 - Reminder: replying to the ORIGINAL complaint only matches NEW tickets (source_message_id); replying to the ACK works for all. Requires production redeploy.
+
+## Dashboard escalated redirect + manager-only routing toggle (2026-06)
+- Dashboard: escalated panel "View all" and per-row "Assign Now" now navigate to /escalated (was /tickets).
+- Society-level flag manager_only_routing (default TRUE). New societies created with it True (super_router). pipeline.create_ticket: if flag on, forces in-house branch -> assigned_to "Society Manager", no vendor pick, ack says handled in-house. When off, normal vendor auto-routing by category/priority.
+- Endpoints: GET/PUT /api/society/routing-mode {manager_only_routing}. Audited as routing_mode_changed.
+- Vendors tab: highlighted pill toggle in header ("All → Society Manager: ON" amber / "Vendor Routing: ON" green) + amber banner when on. Fetches + PUTs routing-mode. Enabled by default.
+- Missing flag on existing societies defaults to True (enabled).
+- Verified: endpoints GET/PUT; pipeline branch routes to manager when on. Requires redeploy for prod.

@@ -35,7 +35,7 @@ async def create_society(body: SocietyCreate, user: dict = Depends(require_super
     doc = {
         "name": body.name, "code": body.code.upper(), "address": body.address or "",
         "city": body.city or "", "towers": body.towers or [], "active": True,
-        "whatsapp_group": None, "monitoring": False, "created_at": now_iso(),
+        "whatsapp_group": None, "monitoring": False, "manager_only_routing": True, "created_at": now_iso(),
     }
     res = await db.societies.insert_one(doc)
     sid = str(res.inserted_id)
