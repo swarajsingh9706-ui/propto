@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Loader2, ArrowRight, Shield } from "lucide-react";
+import { Building2, Loader2 } from "lucide-react";
 
 const HERO = "https://images.pexels.com/photos/18153132/pexels-photo-18153132.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";
 
@@ -68,16 +68,6 @@ export default function SocietyLogin() {
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign in
             </Button>
           </form>
-
-          <button data-testid="demo-society-btn" onClick={() => { setEmail("admin@greenvalley.com"); setPassword("Admin@123"); }}
-            className="mt-6 block w-full rounded-lg border border-dashed border-brand-green/25 bg-brand-green/[0.04] p-3 text-left text-xs text-zinc-600 hover:bg-brand-green/[0.08]">
-            <span className="overline text-brand">Demo</span><br />→ admin@greenvalley.com
-          </button>
-
-          <Link to="/admin/login" data-testid="goto-super-portal"
-            className="mt-6 flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-brand">
-            <Shield className="h-3.5 w-3.5" /> Super Admin? Go to Control Tower <ArrowRight className="h-3 w-3" />
-          </Link>
         </div>
       </div>
 

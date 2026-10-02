@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { Share2 } from "lucide-react";
 import { useScope } from "@/lib/useScope";
 import { PageHeader } from "@/components/Layout";
 import { StatCard } from "@/components/StatCard";
@@ -14,6 +20,21 @@ export default function Reports() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState({ start: "", end: "" });
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const SECTIONS = [["summary", "Summary stats"], ["daily", "Daily complaints"], ["categories", "Top categories"], ["resolution", "Avg resolution time"], ["vendors", "Vendor performance"]];
+  const [picked, setPicked] = useState(["summary", "categories", "resolution", "vendors"]);
+  const togglePick = (k) => setPicked((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]);
+  const share = async () => {
+    setSharing(true);
+    try {
+      const { data: r } = await api.post("/society/reports/share-pdf", { sections: picked, start: range.start || null, end: range.end || null }, cfg);
+      if (!r.group_configured) toast.error("No WhatsApp group connected for this society.");
+      else if (r.sent_to_group) toast.success("Report PDF sent to the WhatsApp group!");
+      else toast.error("PDF built but WhatsApp send failed — check Whapi sender credentials.");
+      setShareOpen(false);
+    } catch (e) { toast.error("Could not share report."); } finally { setSharing(false); }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -30,6 +51,28 @@ export default function Reports() {
     <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader title="Reports & Analytics" subtitle="Society Insights">
         <DateRangeFilter onChange={setRange} testidPrefix="reports-range" />
+        <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="share-report-btn" variant="outline"><Share2 className="mr-1.5 h-4 w-4" />Share to WhatsApp</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle className="font-cabinet">Share Report as PDF</DialogTitle></DialogHeader>
+            <p className="text-xs text-zinc-500">Pick what to include. The PDF (for the selected date range) is sent to your society WhatsApp group via the sender number.</p>
+            <div className="mt-3 space-y-2">
+              {SECTIONS.map(([k, l]) => (
+                <label key={k} className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={picked.includes(k)} onCheckedChange={() => togglePick(k)} data-testid={`share-section-${k}`} />
+                  <span>{l}</span>
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button data-testid="confirm-share-btn" onClick={share} disabled={sharing || picked.length === 0}>
+                {sharing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Send to Group
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </PageHeader>
 
       {loading || !data ? (

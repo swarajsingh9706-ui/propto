@@ -123,6 +123,21 @@ async def send_text(to: str, text: str, reply_to: str = None) -> dict:
     return {"simulated": True, "to": to, "body": text}
 
 
+async def send_document(to: str, media_b64: str, filename: str, caption: str = "") -> dict:
+    """Send a PDF/document to a chat. media_b64 = raw base64 (no data: prefix). Best-effort."""
+    try:
+        if whapi_configured("send"):
+            return await _whapi_post("/messages/document", {
+                "to": to, "media": f"data:application/pdf;base64,{media_b64}",
+                "filename": filename, "caption": caption,
+            })
+    except Exception as e:
+        logger.error("send_document delivery failed to=%s: %s", to, e)
+        return {"error": str(e), "delivered": False}
+    logger.info("[WA-SIMULATED-OUTBOUND-DOC] to=%s filename=%s", to, filename)
+    return {"simulated": True, "to": to, "filename": filename}
+
+
 async def send_buttons(to: str, body: str, buttons: list) -> dict:
     """buttons: list of {'id': str, 'title': str} (max 3). Best-effort; never raises."""
     try:

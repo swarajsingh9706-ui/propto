@@ -21,6 +21,8 @@ async def join_submit(token: str, body: ResidentCreate):
         raise HTTPException(status_code=404, detail="This link is invalid or has expired.")
     if not body.name.strip() or not body.phone.strip():
         raise HTTPException(status_code=400, detail="Name and phone are required.")
+    if await db.residents.find_one({"society_id": str(soc["_id"]), "phone": body.phone.strip()}):
+        raise HTTPException(status_code=409, detail="This phone number is already registered for this society.")
     doc = body.model_dump()
     doc.update({
         "society_id": str(soc["_id"]), "created_at": now_iso(),

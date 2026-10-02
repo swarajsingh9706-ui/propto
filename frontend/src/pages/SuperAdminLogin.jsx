@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ShieldCheck, Loader2, ArrowRight, Building2 } from "lucide-react";
+import { ShieldCheck, Loader2 } from "lucide-react";
 
 const HERO = "https://images.pexels.com/photos/18153132/pexels-photo-18153132.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";
 
@@ -68,16 +68,6 @@ export default function SuperAdminLogin() {
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign in
             </Button>
           </form>
-
-          <button data-testid="demo-super-btn" onClick={() => { setEmail("superadmin@propto.com"); setPassword("Propto@123"); }}
-            className="mt-6 block w-full rounded-lg border border-dashed border-brand-gold/30 bg-brand-gold/[0.06] p-3 text-left text-xs text-zinc-600 hover:bg-brand-gold/[0.1]">
-            <span className="overline text-brand">Demo</span><br />→ superadmin@propto.com
-          </button>
-
-          <Link to="/login" data-testid="goto-society-portal"
-            className="mt-6 flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-brand">
-            <Building2 className="h-3.5 w-3.5" /> Society Admin? Sign in here <ArrowRight className="h-3 w-3" />
-          </Link>
         </div>
       </div>
 

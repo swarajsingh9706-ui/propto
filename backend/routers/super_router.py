@@ -57,10 +57,28 @@ async def create_society(body: SocietyCreate, user: dict = Depends(require_super
 
 @router.put("/societies/{society_id}")
 async def update_society(society_id: str, body: SocietyUpdate, user: dict = Depends(require_super_admin)):
-    updates = {k: v for k, v in body.model_dump(exclude_none=True).items()}
-    if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
-    await db.societies.update_one({"_id": ObjectId(society_id)}, {"$set": updates})
+    data = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    admin_email = data.pop("admin_email", None)
+    admin_password = data.pop("admin_password", None)
+    if data:
+        await db.societies.update_one({"_id": ObjectId(society_id)}, {"$set": data})
+    if admin_email or admin_password:
+        existing = await db.users.find_one({"society_id": society_id, "role": "society_admin"})
+        cred = {}
+        if admin_email:
+            email = admin_email.lower().strip()
+            dup = await db.users.find_one({"email": email})
+            if dup and str(dup["_id"]) != str((existing or {}).get("_id")):
+                raise HTTPException(status_code=400, detail="Admin email already in use")
+            cred["email"] = email
+        if admin_password:
+            cred["password_hash"] = hash_password(admin_password)
+        if existing:
+            await db.users.update_one({"_id": existing["_id"]}, {"$set": cred})
+        elif admin_email and admin_password:
+            await db.users.insert_one({"email": admin_email.lower().strip(), "password_hash": hash_password(admin_password),
+                                       "name": data.get("name") or "Society Admin", "role": "society_admin",
+                                       "society_id": society_id, "created_at": now_iso()})
     s = await db.societies.find_one({"_id": ObjectId(society_id)})
     if not s:
         raise HTTPException(status_code=404, detail="Society not found")

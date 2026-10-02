@@ -345,3 +345,12 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Vendors tab: highlighted pill toggle in header ("All → Society Manager: ON" amber / "Vendor Routing: ON" green) + amber banner when on. Fetches + PUTs routing-mode. Enabled by default.
 - Missing flag on existing societies defaults to True (enabled).
 - Verified: endpoints GET/PUT; pipeline branch routes to manager when on. Requires redeploy for prod.
+
+## Super/society batch + login cleanup + Reports PDF (2026-06)
+- Login: removed demo-credential buttons + cross-portal redirect links from SocietyLogin.jsx & SuperAdminLogin.jsx.
+- Super WhatsApp (SuperWhatsApp.jsx): replaced society dropdown with search + city filter (card picker). Monitoring OFF now blocks ticket creation — pipeline.process_message early-returns "ignored (monitoring disabled)" but still logs ai_activity. Verified.
+- Super Societies: search bar + city filter; Edit Society dialog (name/city/address/towers + update admin email & password); removed Power activate/deactivate button. Backend super_router.update_society handles admin_email/admin_password (SocietyUpdate model extended; hashes pw, updates/creates linked society_admin user).
+- Resident public form (Join.jsx): country-code dropdown (India default) + combined phone; public_router rejects duplicate phone within the SAME society (HTTP 409 -> toast).
+- Reports: "Share to WhatsApp" -> POST /api/society/reports/share-pdf {sections,start,end}. reportlab builds a branded (PROPTO blue) PDF of selected sections (summary/daily/categories/resolution/vendors) respecting date range; sent to society group via wa.send_document (sender token). Verified PDF build; group send works with live Whapi on VPS (simulated in preview). reportlab==5.0.1 added to requirements.txt.
+- UI: darkened --secondary token (210 40% 96% -> 210 24% 90%) so tab hovers / faint grey surfaces are more visible.
+- NOTE: redeploy required; group PDF delivery needs valid Whapi sender token.

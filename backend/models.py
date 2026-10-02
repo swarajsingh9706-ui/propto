@@ -65,6 +65,8 @@ class SocietyUpdate(BaseModel):
     city: Optional[str] = None
     towers: Optional[List[str]] = None
     active: Optional[bool] = None
+    admin_email: Optional[str] = None
+    admin_password: Optional[str] = None
 
 
 # ---------- Vendor ----------

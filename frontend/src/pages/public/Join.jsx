@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { COUNTRY_CODES } from "@/lib/countryCodes";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, Building2 } from "lucide-react";
 
 const client = axios.create({ baseURL: API });
-const empty = { name: "", phone: "", flat: "", tower: "", status: "Owner" };
+const empty = { name: "", dial: "91", phone: "", flat: "", tower: "", status: "Owner" };
 
 export default function Join() {
   const { token } = useParams();
@@ -28,7 +29,8 @@ export default function Join() {
   const submit = async () => {
     setSaving(true);
     try {
-      await client.post(`/public/join/${token}`, form);
+      const payload = { name: form.name, phone: form.dial + (form.phone || "").replace(/\D/g, ""), flat: form.flat, tower: form.tower, status: form.status };
+      await client.post(`/public/join/${token}`, payload);
       setDone(true);
     } catch (e) { toast.error(apiError(e)); }
     finally { setSaving(false); }
@@ -71,7 +73,15 @@ export default function Join() {
 
             <div className="mt-6 grid grid-cols-2 gap-3">
               <div className="col-span-2"><Label className="text-xs">Full Name</Label><Input data-testid="join-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
-              <div className="col-span-2"><Label className="text-xs">Phone (with country code)</Label><Input data-testid="join-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="918111111101" className="mt-1" /></div>
+              <div className="col-span-2"><Label className="text-xs">Phone</Label>
+                <div className="mt-1 flex gap-2">
+                  <Select value={form.dial} onValueChange={(v) => setForm({ ...form, dial: v })}>
+                    <SelectTrigger data-testid="join-country-code" className="w-[135px] shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent className="max-h-64">{COUNTRY_CODES.map((c) => <SelectItem key={c.dial + c.label} value={c.dial}>{c.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Input data-testid="join-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="8111111101" className="flex-1" />
+                </div>
+              </div>
               <div><Label className="text-xs">Flat</Label><Input data-testid="join-flat" value={form.flat} onChange={(e) => setForm({ ...form, flat: e.target.value })} placeholder="B302" className="mt-1" /></div>
               <div>
                 <Label className="text-xs">Tower</Label>

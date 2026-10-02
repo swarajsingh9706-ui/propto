@@ -245,6 +245,11 @@ async def process_message(society_id: str, phone: str, text: str, group_chat_id:
     reply_target = group_chat_id if in_group else phone
     quote = reply_to if in_group else None
 
+    soc = await db.societies.find_one({"_id": ObjectId(society_id)})
+    if soc is not None and not soc.get("monitoring", False):
+        await log_activity(society_id, phone, text, "ignored", reason="monitoring disabled — no ticket created")
+        return {"status": "ignored", "reason": "monitoring disabled"}
+
     rule = ai_engine.prefilter(text)
     if not rule["forward"]:
         await log_activity(society_id, phone, text, "ignored", reason=rule["reason"])
