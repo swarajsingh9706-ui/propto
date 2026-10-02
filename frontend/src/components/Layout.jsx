@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import {
   LayoutDashboard, Ticket, Users, HardHat, Bot, Bell,
   MessageSquare, BarChart3, Building2, LogOut, ChevronLeft, Lightbulb, ScrollText,
-  Package, AlertTriangle, Workflow, Menu, X,
+  Package, AlertTriangle, Menu, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -18,14 +18,13 @@ const SUPER_NAV = [
 const SOCIETY_NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/tickets", label: "Tickets", icon: Ticket },
-  { to: "/escalated", label: "Escalated Queue", icon: AlertTriangle },
-  { to: "/assignment-logic", label: "Assignment Logic", icon: Workflow },
-  { to: "/assets", label: "Assets", icon: Package },
-  { to: "/vendors", label: "Vendors", icon: HardHat },
-  { to: "/residents", label: "Residents", icon: Users },
-  { to: "/committee", label: "Society Committee", icon: Building2 },
-  { to: "/reports", label: "Analytics", icon: BarChart3 },
+  { to: "/escalated", label: "Escalated Tickets", icon: AlertTriangle },
   { to: "/suggestions", label: "Resident Suggestions", icon: Lightbulb },
+  { to: "/assets", label: "Assets", icon: Package },
+  { to: "/reports", label: "Reports", icon: BarChart3 },
+  { to: "/committee", label: "Society Committee", icon: Building2 },
+  { to: "/residents", label: "Residents", icon: Users },
+  { to: "/vendors", label: "Vendors", icon: HardHat },
   { to: "/ai-activity", label: "AI Activity", icon: Bot },
   { to: "/notifications", label: "Notifications", icon: Bell },
   { to: "/audit", label: "Audit Log", icon: ScrollText },
