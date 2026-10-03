@@ -1,9 +1,15 @@
 from fastapi import APIRouter, HTTPException
+from bson import ObjectId
+import logging
 
 from db import db
-from models import ResidentCreate, now_iso
+from models import ResidentCreate, PublicReassign, now_iso
+import pipeline
+import whatsapp_client as wa
+import audit
 
 router = APIRouter(prefix="/api/public", tags=["public"])
+logger = logging.getLogger("propto.public")
 
 
 @router.get("/join/{token}")
@@ -30,3 +36,126 @@ async def join_submit(token: str, body: ResidentCreate):
     })
     await db.residents.insert_one(doc)
     return {"status": "submitted", "society_name": soc.get("name")}
+
+
+# ---------- Public ticket view / manage (token-scoped, no login) ----------
+async def _ticket_by_token(token: str):
+    t = await db.tickets.find_one({"view_token": token})
+    if not t:
+        raise HTTPException(status_code=404, detail="This ticket link is invalid or has expired.")
+    return t
+
+
+async def _notify_group(ticket: dict, text: str):
+    """Post an update to the society WhatsApp group, quoting the original complaint."""
+    try:
+        soc = await db.societies.find_one({"_id": ObjectId(ticket["society_id"])})
+        gid = ((soc or {}).get("whatsapp_group") or {}).get("chat_id")
+        if gid:
+            await wa.send_text(gid, text, reply_to=ticket.get("source_message_id") or ticket.get("ack_message_id"))
+        elif ticket.get("resident_phone"):
+            await wa.send_text(ticket["resident_phone"], text)
+    except Exception as e:
+        logger.warning("public group notify failed: %s", e)
+
+
+@router.get("/ticket/{token}")
+async def ticket_view(token: str):
+    t = await _ticket_by_token(token)
+    soc = await db.societies.find_one({"_id": ObjectId(t["society_id"])})
+    status = t.get("status")
+    return {
+        "ticket_number": t.get("ticket_number"),
+        "society_name": (soc or {}).get("name") or "",
+        "description": t.get("description") or "",
+        "category": t.get("category") or "",
+        "sub_category": t.get("sub_category") or "",
+        "flat": t.get("flat") or "",
+        "tower": t.get("tower") or "",
+        "priority": t.get("priority") or "",
+        "status": status,
+        "resident_name": t.get("resident_name") or "",
+        "assigned_to": t.get("assigned_to") or t.get("vendor_name") or "",
+        "vendor_name": t.get("vendor_name") or "",
+        "created_at": t.get("created_at"),
+        "can_act": status not in ("Cancelled", "Resolved"),
+    }
+
+
+@router.get("/ticket/{token}/categories")
+async def ticket_categories(token: str):
+    t = await _ticket_by_token(token)
+    cursor = db.vendors.find({"society_id": t["society_id"], "active": True})
+    cats = set()
+    async for v in cursor:
+        for c in (v.get("categories") or []):
+            if c:
+                cats.add(c)
+    return {"categories": sorted(cats)}
+
+
+@router.post("/ticket/{token}/cancel")
+async def ticket_cancel(token: str):
+    t = await _ticket_by_token(token)
+    tnum = t.get("ticket_number")
+    if t.get("status") == "Cancelled":
+        raise HTTPException(status_code=400, detail=f"Ticket {tnum} is already cancelled.")
+    if t.get("status") == "Resolved":
+        raise HTTPException(status_code=400, detail=f"Ticket {tnum} is already resolved and can't be cancelled.")
+    sid = t["society_id"]
+    await db.tickets.update_one({"_id": t["_id"]}, {"$set": {"status": "Cancelled", "cancelled_by": "web", "updated_at": now_iso()}})
+    await pipeline.add_timeline(str(t["_id"]), "Ticket Cancelled", "Cancelled via ticket details page")
+    await audit.log(sid, "ticket_cancelled", f"{tnum} cancelled via ticket details page", actor="Ticket page", category="ticket", ticket_number=tnum)
+    await _notify_group(t, f"❌ Ticket {tnum} has been *cancelled* as requested. No further action will be taken.")
+    vid = t.get("vendor_id")
+    if vid:
+        try:
+            v = await db.vendors.find_one({"_id": ObjectId(vid)})
+            if v and v.get("phone"):
+                await wa.send_text(v["phone"], f"⚠️ Ticket {tnum} ({t.get('category') or 'Issue'} · Flat {t.get('flat') or '—'}) has been CANCELLED. No action is required — please disregard this job.")
+        except Exception as e:
+            logger.warning("vendor cancel notice failed: %s", e)
+    return {"status": "Cancelled"}
+
+
+@router.post("/ticket/{token}/reassign")
+async def ticket_reassign(token: str, body: PublicReassign):
+    t = await _ticket_by_token(token)
+    tnum = t.get("ticket_number")
+    if t.get("status") in ("Cancelled", "Resolved"):
+        raise HTTPException(status_code=400, detail=f"Ticket {tnum} is {t.get('status').lower()} and can't be reassigned.")
+    sid = t["society_id"]
+    prev_vid = t.get("vendor_id")
+
+    if body.target == "manager":
+        await db.tickets.update_one({"_id": t["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "assigned_to": "Society Manager", "status": "Pending", "updated_at": now_iso()}})
+        await pipeline.add_timeline(str(t["_id"]), "Reassigned to Society Manager", "Handled in-house via ticket details page")
+        await audit.log(sid, "ticket_reassigned_manager", f"{tnum} reassigned to Society Manager via ticket page", actor="Ticket page", category="ticket", ticket_number=tnum)
+        await _notify_group(t, f"🔄 Ticket {tnum} has been reassigned to the Society Manager (handled in-house).")
+        await _notify_prev_vendor(prev_vid, tnum, t)
+        return {"status": "Pending", "assigned_to": "Society Manager"}
+
+    category = (body.category or "").strip()
+    if not category:
+        raise HTTPException(status_code=400, detail="Please select a category to reassign.")
+    vendor = await pipeline.pick_vendor(sid, category, exclude_id=str(prev_vid) if prev_vid else None)
+    if not vendor:
+        raise HTTPException(status_code=400, detail=f"No available vendor found for {category}.")
+    ticket_for_assign = dict(t)
+    ticket_for_assign["category"] = category
+    await pipeline.assign_vendor(ticket_for_assign, vendor, actor="Ticket page")
+    await _notify_group(t, f"🔄 Ticket {tnum} has been reassigned to {vendor['name']} ({category}). They'll reach out shortly.")
+    if prev_vid and str(prev_vid) != str(vendor["_id"]):
+        await _notify_prev_vendor(prev_vid, tnum, t)
+    return {"status": "Pending", "assigned_to": vendor["name"]}
+
+
+async def _notify_prev_vendor(prev_vid, tnum, ticket):
+    if not prev_vid:
+        return
+    try:
+        v = await db.vendors.find_one({"_id": ObjectId(prev_vid)})
+        if v and v.get("phone"):
+            await wa.send_text(v["phone"], f"ℹ️ Ticket {tnum} ({ticket.get('category') or 'Issue'} · Flat {ticket.get('flat') or '—'}) has been reassigned. No action is required from you.")
+    except Exception as e:
+        logger.warning("prev vendor notice failed: %s", e)

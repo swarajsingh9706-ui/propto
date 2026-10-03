@@ -1,5 +1,17 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Feature (2026-06) — Public "View ticket details" link from WhatsApp acknowledgement
+Each ticket now gets a random `view_token` on creation (`pipeline.create_ticket`). The group/DM acknowledgement message appends `📋 View ticket details: {PUBLIC_APP_URL}/t/{view_token}` (base from backend env `PUBLIC_APP_URL`, set to `https://manage.propto.app`).
+- Public, token-scoped, no-login endpoints in `public_router.py`:
+  - `GET /api/public/ticket/{token}` — core fields (number, society, description, category, flat, priority, status, reporter, assigned-to, `can_act`).
+  - `GET /api/public/ticket/{token}/categories` — categories that have active vendors in the society.
+  - `POST /api/public/ticket/{token}/cancel` — mark Cancelled, notify group (quoted) + assigned vendor; 400 if already Cancelled/Resolved.
+  - `POST /api/public/ticket/{token}/reassign` body `{target:"vendor",category}` → top-priority vendor via `pipeline.pick_vendor`+`assign_vendor`; `{target:"manager"}` → Society Manager in-house. Notifies group + previous vendor; 400 if Cancelled/Resolved.
+- Frontend page `/t/:token` (`pages/public/TicketView.jsx`, unauthenticated route in `App.js`): branded card, status/priority badges, core fields, and Reassign / Assign-to-Manager / Cancel actions with confirm dialogs. Actions hidden when ticket is Cancelled/Resolved.
+- Added `PublicReassign` model; added `reassigned` to `_BOT_MARKERS` echo guard.
+- Verified end-to-end via curl (view/categories/reassign-vendor/reassign-manager/cancel + 400/404 guards) and screenshots (active + cancelled states).
+
+
 ## Feature (2026-06) — 4 new society tabs from Admin Dashboard reference
 Added, styled to match `Propto_Admin_Dashboard.html` (blue/indigo cards, colored top-border stat cards, grid tables) using existing `DashKit` components:
 - **Assets** (`/assets`): register with stat cards (total/due soon/overdue/scheduled) + table + Add Asset dialog. Backend: `GET/POST/DELETE /api/society/assets` (collection `assets`).

@@ -117,6 +117,11 @@ class TicketUpdate(BaseModel):
     description: Optional[str] = None
 
 
+class PublicReassign(BaseModel):
+    target: str  # "vendor" | "manager"
+    category: Optional[str] = None
+
+
 # ---------- WhatsApp Simulator ----------
 class SimulateMessage(BaseModel):
     phone: str

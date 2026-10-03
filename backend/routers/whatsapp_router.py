@@ -315,6 +315,7 @@ _BOT_MARKERS = (
     "can cancel it",
     "already cancelled",
     "can't be cancelled",
+    "reassigned",
 )
 
 
