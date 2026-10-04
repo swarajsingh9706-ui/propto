@@ -1,6 +1,15 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Feature (2026-06) — Inline Escalation Matrix / Notification Timeline on Assets page
+## Feature (2026-06) — Vendor flow overhaul + response-time SLA
+- **Removed "Suggest Time"** vendor button — vendors now get only **Accept** / **Reject** (pipeline `assign_vendor`). Dropped the `vendor_time_` button handler and the `awaiting_vendor_time` direct-reply branch.
+- **On Accept** (`whatsapp_router._vendor_action`): vendor gets a confirmation DM with the complaint raiser's **name, phone, flat, society name** and the issue text; the **customer** is sent the vendor's contact (name + phone) personally.
+- **On Reject**: vendor gets a decline confirmation; ticket reassigns to the next available vendor by priority; if none exist it is assigned to the **Society Manager**. Group is notified.
+- **On Resolve/close**: the resolved confirmation now goes to the **society WhatsApp group** (quoting the original complaint) instead of a personal DM.
+- **Vendor response time**: new `response_time_hours` field on vendors (default **2**), editable in Add + Edit vendor dialogs (`Vendors.jsx`), shown on the vendor card. `assign_vendor` stamps `vendor_assigned_at` + `response_due_at`.
+- **Timeout → Society Manager**: `pipeline.check_vendor_timeouts()` reassigns any Pending, un-accepted ticket whose `response_due_at` has passed to the Society Manager (notifies group + the lapsed vendor). Exposed via protected `POST /api/cron/vendor-timeouts`.
+  - **VPS setup required**: add a system cron (e.g. every 5 min) calling `POST /api/cron/vendor-timeouts` with `Authorization: Bearer $WEBHOOK_CRON_SECRET` — same pattern as `/api/cron/asset-alerts`. Without this cron the timeout reassignment won't fire automatically.
+- Verified via API (vendor create default 2 / custom 3) and an integration probe (`tests/vendor_flow_probe.py`) covering accept, reject(+reassign), resolve, and timeout DB state transitions.
+
 Replaced the Assets "Escalation Matrix" button + popup with an inline **Escalation Matrix** tab (3rd tab after All Assets / Asset Tickets) styled to match the uploaded `Propto_Admin_Dashboard Analytics.html` design.
 - `components/EscalationMatrix.jsx`: legend bar (Health / Service Status), header with bell + "Add Contact", left **Notification Timeline** of 4 colored rule cards (blue Pre-service 7d before, amber Final 1d before, red Overdue 2d after, purple Critical 7d after) each with a pencil edit; right **Committee Contacts** list (colored initials avatar, role, phone, edit/delete) + "How it works" box.
 - Backend (`society_router.py`): `GET/PUT /api/society/escalation-timeline` stores `escalation_timeline` on the society (4 rule objects: key, offset_days, direction, timing, title, description, notify[], channel, color) with `DEFAULT_TIMELINE` matching the design; added `PUT /api/society/committee/{cid}` to edit a committee member (edit was previously only add/delete).

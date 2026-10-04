@@ -99,6 +99,11 @@ async def _notify_followers(ticket: dict, text: str):
         logger.warning("follower notify failed: %s", e)
 
 
+async def _group_chat_id(society_id: str):
+    soc = await db.societies.find_one({"_id": ObjectId(society_id)})
+    return ((soc or {}).get("whatsapp_group") or {}).get("chat_id")
+
+
 async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
     try:
         ticket = await db.tickets.find_one({"_id": ObjectId(tid)})
@@ -113,36 +118,65 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
     cat = ticket.get("category")
 
     if action == "accept":
-        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Pending", "vendor_accepted": True, "awaiting_vendor_time": False, "updated_at": now_iso()}})
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Pending", "vendor_accepted": True, "response_due_at": None, "updated_at": now_iso()}})
         await pipeline.add_timeline(tid, "Vendor Accepted", f"{vname} accepted the job")
-        await _ack(phone, f"👍 Thanks! You've *accepted* {num} ({cat} · Flat {flat}). Please visit and reply *DONE* once resolved.")
-        await _notify_followers(ticket, f"👷 {vname} accepted {num} and will attend to the {cat} issue at Flat {flat} shortly.")
         await audit.log(society_id, "vendor_accepted", f"{vname} accepted {num} ({cat} · Flat {flat}) via WhatsApp", actor=vname, category="vendor", ticket_number=num)
+        soc = await db.societies.find_one({"_id": ObjectId(society_id)})
+        soc_name = (soc or {}).get("name") or "the society"
+        rname = ticket.get("resident_name") or "Resident"
+        rphone = ticket.get("reporter_phone") or ticket.get("resident_phone") or "—"
+        # 1) Confirm to the vendor + share the complaint raiser's details
+        await _ack(phone,
+                   f"👍 You've *accepted* {num} ({cat}).\n"
+                   f"Raised by: {rname}\n"
+                   f"Phone: {rphone}\n"
+                   f"Flat: {flat}\n"
+                   f"Society: {soc_name}\n"
+                   f"Issue: {ticket.get('description') or cat}\n\n"
+                   f"Please visit and reply *DONE* once resolved.")
+        # 2) Send the vendor's contact to the customer personally
+        vendor = None
+        if ticket.get("vendor_id"):
+            try:
+                vendor = await db.vendors.find_one({"_id": ObjectId(ticket["vendor_id"])})
+            except Exception:
+                vendor = None
+        cust = ticket.get("reporter_phone") or ticket.get("resident_phone")
+        if cust:
+            await _ack(cust,
+                       f"✅ Good news! Your complaint {num} ({cat} · Flat {flat}) has been accepted by *{vname}*.\n"
+                       f"Vendor contact: {(vendor or {}).get('phone') or '—'}\n"
+                       f"They'll reach out shortly — feel free to coordinate directly.")
 
     elif action == "reject":
-        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "awaiting_vendor_time": False, "updated_at": now_iso()}})
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "vendor_accepted": False, "response_due_at": None, "updated_at": now_iso()}})
         await pipeline.add_timeline(tid, "Vendor Rejected", f"{vname} declined the job")
         await audit.log(society_id, "vendor_rejected", f"{vname} declined {num} via WhatsApp", actor=vname, category="vendor", ticket_number=num)
         await _ack(phone, f"No problem — you've *declined* {num}. We'll reassign it.")
         fresh = await db.tickets.find_one({"_id": ticket["_id"]})
         newv = await pipeline.pick_vendor(society_id, cat, exclude_id=str(ticket.get("vendor_id")) if ticket.get("vendor_id") else None)
+        gid = await _group_chat_id(society_id)
+        quote = ticket.get("source_message_id")
         if newv:
             await pipeline.assign_vendor(fresh, newv)
-            await _notify_followers(ticket, f"🔄 {num} is being reassigned to {newv['name']}.")
+            if gid:
+                await wa.send_text(gid, f"🔄 {num} is being reassigned to {newv['name']}.", reply_to=quote)
         else:
-            await _notify_followers(ticket, f"⏳ {num} needs reassignment — our team will assign another vendor shortly.")
+            await pipeline.assign_to_manager(fresh, reason="No other vendor available after rejection")
+            if gid:
+                await wa.send_text(gid, f"🔄 {num} has been assigned to the Society Manager (no other vendor available).", reply_to=quote)
 
     elif action == "resolve":
-        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Resolved", "awaiting_vendor_time": False, "updated_at": now_iso()}})
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Resolved", "response_due_at": None, "updated_at": now_iso()}})
         await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by {vname}")
         await audit.log(society_id, "ticket_resolved", f"{num} ({cat} · Flat {flat}) marked resolved by {vname} via WhatsApp", actor=vname, category="ticket", ticket_number=num)
         await _ack(phone, f"✅ Marked {num} as *resolved*. Thank you!")
-        await _notify_followers(ticket, f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}. We'd love your feedback!")
-
-    elif action == "time":
-        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"awaiting_vendor_time": True, "updated_at": now_iso()}})
-        await pipeline.add_timeline(tid, "Vendor: Suggesting Time", f"{vname} will propose a visit time")
-        await _ack(phone, f"🕒 Sure — please reply with your preferred visit time for {num} (e.g. \"Tomorrow 4 PM\").")
+        # Resolved confirmation goes to the GROUP (quoting the original complaint)
+        gid = await _group_chat_id(society_id)
+        if gid:
+            await wa.send_text(gid, f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}. Thank you!", reply_to=ticket.get("source_message_id"))
+        elif ticket.get("resident_phone"):
+            await wa.send_text(ticket["resident_phone"], f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}.")
 
 
 async def _apply_poll_results(m: dict, create_if_missing: bool = False):
@@ -235,8 +269,6 @@ async def _handle_button(society_id: str, phone: str, button_id: str):
         await _vendor_action(society_id, phone, button_id.replace("vendor_accept_", ""), "accept")
     elif button_id.startswith("vendor_reject_"):
         await _vendor_action(society_id, phone, button_id.replace("vendor_reject_", ""), "reject")
-    elif button_id.startswith("vendor_time_"):
-        await _vendor_action(society_id, phone, button_id.replace("vendor_time_", ""), "time")
     elif button_id.startswith("vendor_resolved_"):
         await _vendor_action(society_id, phone, button_id.replace("vendor_resolved_", ""), "resolve")
     elif button_id == "resident_confirm":
@@ -443,12 +475,6 @@ async def _handle_direct_reply(society_id: str, phone: str, text: str):
                 await _vendor_action(society_id, phone, tid, "reject"); return
             if "resolve" in t or t == "done" or "complete" in t or "finished" in t:
                 await _vendor_action(society_id, phone, tid, "resolve"); return
-            if job.get("awaiting_vendor_time"):
-                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"preferred_time": text.strip(), "awaiting_vendor_time": False, "updated_at": now_iso()}})
-                await pipeline.add_timeline(tid, "Vendor Suggested Time", f"{vendor['name']}: {text.strip()}")
-                await _ack(phone, f"🕒 Noted — visit time for {job.get('ticket_number')} set to \"{text.strip()}\".")
-                await _notify_followers(job, f"🕒 {vendor['name']} proposed a visit time for {job.get('ticket_number')}: {text.strip()}.")
-                return
     if "confirm" in t or t == "yes":
         await _handle_button(society_id, phone, "resident_confirm")
     elif "cancel" in t or t == "no":

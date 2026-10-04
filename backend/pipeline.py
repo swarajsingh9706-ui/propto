@@ -104,12 +104,20 @@ async def add_timeline(ticket_id: str, event: str, detail: str = ""):
 
 async def assign_vendor(ticket: dict, vendor: dict, actor: str = "AI (auto-route)"):
     tid = str(ticket["_id"])
+    try:
+        rt = float(vendor.get("response_time_hours") or 2)
+    except (TypeError, ValueError):
+        rt = 2.0
+    now = datetime.now(timezone.utc)
+    response_due = (now + timedelta(hours=rt)).isoformat()
     await db.tickets.update_one(
         {"_id": ObjectId(tid)},
         {"$set": {"vendor_id": str(vendor["_id"]), "vendor_name": vendor["name"],
-                  "status": "Pending", "updated_at": now_iso()}},
+                  "status": "Pending", "assigned_to": None, "vendor_accepted": False,
+                  "vendor_assigned_at": now.isoformat(), "response_due_at": response_due,
+                  "updated_at": now_iso()}},
     )
-    await add_timeline(tid, "Vendor Assigned", f"{vendor['name']} assigned")
+    await add_timeline(tid, "Vendor Assigned", f"{vendor['name']} assigned (respond within {rt:g}h)")
     await audit.log(ticket.get("society_id"), "vendor_assigned",
                     f"{vendor['name']} assigned to {ticket.get('ticket_number')} ({ticket.get('category')})",
                     actor=actor, category="vendor", ticket_number=ticket.get("ticket_number"))
@@ -117,9 +125,55 @@ async def assign_vendor(ticket: dict, vendor: dict, actor: str = "AI (auto-route
         vendor["phone"],
         f"New job: {ticket['category']} at Flat {ticket.get('flat','?')} ({ticket['priority']} priority). {ticket['description']}",
         [{"id": f"vendor_accept_{tid}", "title": "Accept"},
-         {"id": f"vendor_reject_{tid}", "title": "Reject"},
-         {"id": f"vendor_time_{tid}", "title": "Suggest Time"}],
+         {"id": f"vendor_reject_{tid}", "title": "Reject"}],
     ))
+
+
+async def _society_group(society_id: str):
+    soc = await db.societies.find_one({"_id": ObjectId(society_id)})
+    return ((soc or {}).get("whatsapp_group") or {}).get("chat_id")
+
+
+async def assign_to_manager(ticket: dict, reason: str = ""):
+    tid = str(ticket["_id"])
+    await db.tickets.update_one(
+        {"_id": ObjectId(tid)},
+        {"$set": {"vendor_id": None, "vendor_name": None, "assigned_to": "Society Manager",
+                  "status": "Pending", "vendor_accepted": False, "response_due_at": None,
+                  "updated_at": now_iso()}},
+    )
+    await add_timeline(tid, "Assigned to Society Manager", reason or "Handled in-house by the society manager")
+    await audit.log(ticket.get("society_id"), "ticket_assigned_manager",
+                    f"{ticket.get('ticket_number')} routed to the Society Manager" + (f" — {reason}" if reason else ""),
+                    actor="PROPTO", category="ticket", ticket_number=ticket.get("ticket_number"))
+
+
+async def check_vendor_timeouts():
+    """Reassign tickets to the Society Manager when the assigned vendor did not
+    accept within their response-time window. Meant to run periodically (cron)."""
+    now = datetime.now(timezone.utc).isoformat()
+    tickets = await db.tickets.find({
+        "status": "Pending", "vendor_accepted": {"$ne": True},
+        "vendor_id": {"$ne": None}, "response_due_at": {"$ne": None, "$lt": now},
+    }).to_list(500)
+    count = 0
+    for t in tickets:
+        prev_vid = t.get("vendor_id")
+        num = t.get("ticket_number")
+        await assign_to_manager(t, reason="Vendor response time exceeded")
+        gid = await _society_group(t["society_id"])
+        try:
+            if gid:
+                await wa.send_text(gid, f"⏱️ Ticket {num} was not accepted in time and has been assigned to the Society Manager.", reply_to=t.get("source_message_id"))
+            if prev_vid:
+                v = await db.vendors.find_one({"_id": ObjectId(prev_vid)})
+                if v and v.get("phone"):
+                    await wa.send_text(v["phone"], f"⏱️ Ticket {num} was reassigned because the response time elapsed. No action is required.")
+        except Exception as e:
+            logger.warning("vendor timeout notify failed for %s: %s", num, e)
+        count += 1
+    logger.info("vendor timeout check complete: %d reassigned", count)
+    return {"reassigned": count}
 
 
 def _extract_msg_id(res):

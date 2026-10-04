@@ -77,6 +77,7 @@ class VendorCreate(BaseModel):
     availability: bool = True
     active: bool = True
     priorities: dict = {}
+    response_time_hours: float = 2
 
 
 class VendorUpdate(BaseModel):
@@ -86,6 +87,7 @@ class VendorUpdate(BaseModel):
     availability: Optional[bool] = None
     active: Optional[bool] = None
     priorities: Optional[dict] = None
+    response_time_hours: Optional[float] = None
 
 
 # ---------- Resident ----------

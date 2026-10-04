@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Header, HTTPException
 
 import asset_alerts
+import pipeline
 
 logger = logging.getLogger("propto.cron")
 router = APIRouter(prefix="/api/cron", tags=["cron"])
@@ -22,4 +23,13 @@ async def asset_alerts_cron(authorization: str = Header(None)):
     if not _authorized(authorization):
         raise HTTPException(status_code=401, detail="unauthorized")
     asyncio.create_task(asset_alerts.run_asset_alerts())
+    return {"status": "accepted"}
+
+
+@router.post("/vendor-timeouts")
+async def vendor_timeouts_cron(authorization: str = Header(None)):
+    # Reassign un-accepted tickets to the Society Manager past the vendor response window.
+    if not _authorized(authorization):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(pipeline.check_vendor_timeouts())
     return {"status": "accepted"}

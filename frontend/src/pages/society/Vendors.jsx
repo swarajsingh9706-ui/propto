@@ -63,7 +63,7 @@ const COUNTRY_CODES = [
   { dial: "64", label: "New Zealand (+64)" },
 ];
 
-const empty = { name: "", dial: "91", phone: "", categories: [], priorities: {}, availability: true, active: true };
+const empty = { name: "", dial: "91", phone: "", categories: [], priorities: {}, availability: true, active: true, response_time_hours: 2 };
 
 export default function Vendors() {
   const cfg = useScope();
@@ -94,7 +94,7 @@ export default function Vendors() {
     const sorted = [...COUNTRY_CODES].sort((a, b) => b.dial.length - a.dial.length);
     let dial = "91", number = digits;
     for (const c of sorted) { if (digits.startsWith(c.dial)) { dial = c.dial; number = digits.slice(c.dial.length); break; } }
-    setEditForm({ name: v.name, dial, phone: number, categories: v.categories || [], priorities: { ...(v.priorities || {}) }, availability: v.availability, active: v.active });
+    setEditForm({ name: v.name, dial, phone: number, categories: v.categories || [], priorities: { ...(v.priorities || {}) }, availability: v.availability, active: v.active, response_time_hours: v.response_time_hours ?? 2 });
     setEditing(v);
   };
   const editToggleCat = (c) => setEditForm((f) => {
@@ -110,7 +110,7 @@ export default function Vendors() {
       const num = (editForm.phone || "").replace(/\D/g, "");
       const priorities = {};
       Object.entries(editForm.priorities).forEach(([k, val]) => { const n = parseInt(val, 10); if (!isNaN(n) && n > 0) priorities[k] = n; });
-      await api.put(`/society/vendors/${editing.id}`, { name: editForm.name, phone: editForm.dial + num, categories: editForm.categories, availability: editForm.availability, active: editForm.active, priorities }, cfg);
+      await api.put(`/society/vendors/${editing.id}`, { name: editForm.name, phone: editForm.dial + num, categories: editForm.categories, availability: editForm.availability, active: editForm.active, priorities, response_time_hours: Number(editForm.response_time_hours) || 2 }, cfg);
       toast.success("Vendor updated"); setEditing(null); reload();
     } catch (e) { toast.error(apiError(e)); } finally { setSavingEdit(false); }
   };
@@ -121,7 +121,7 @@ export default function Vendors() {
       const num = (form.phone || "").replace(/\D/g, "");
       const priorities = {};
       Object.entries(form.priorities).forEach(([k, val]) => { const n = parseInt(val, 10); if (!isNaN(n) && n > 0) priorities[k] = n; });
-      const payload = { name: form.name, phone: form.dial + num, categories: form.categories, availability: form.availability, active: true, priorities };
+      const payload = { name: form.name, phone: form.dial + num, categories: form.categories, availability: form.availability, active: true, priorities, response_time_hours: Number(form.response_time_hours) || 2 };
       await api.post("/society/vendors", payload, cfg);
       toast.success("Vendor added"); setOpen(false); setForm(empty); reload();
     } catch (e) { toast.error(apiError(e)); }
@@ -161,6 +161,7 @@ export default function Vendors() {
       <div className="min-w-[140px] flex-1">
         <h3 className="font-cabinet text-base font-bold tracking-tight">{v.name}</h3>
         <p className="flex items-center gap-1 text-xs text-zinc-400"><Phone className="h-3 w-3" />{v.phone}</p>
+        <p className="text-[11px] text-zinc-400">Responds within {v.response_time_hours ?? 2}h</p>
         <div className="mt-1 flex flex-wrap gap-1">
           {v.categories?.map((c) => <span key={c} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor(c)}`}>{c}</span>)}
         </div>
@@ -212,6 +213,12 @@ export default function Vendors() {
                   </Select>
                   <Input data-testid="vendor-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="9000000001" className="flex-1" />
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs">Response time (hours)</Label>
+                <Input type="number" min="0" step="0.5" data-testid="vendor-response-time-input" value={form.response_time_hours}
+                  onChange={(e) => setForm({ ...form, response_time_hours: e.target.value })} className="mt-1" placeholder="2" />
+                <p className="mt-1 text-[10px] text-zinc-400">If the vendor doesn't accept within this time, the ticket is assigned to the Society Manager. Default 2 hours.</p>
               </div>
               <div>
                 <Label className="text-xs">Categories</Label>
@@ -302,6 +309,12 @@ export default function Vendors() {
                 </Select>
                 <Input data-testid="edit-vendor-phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="9000000001" className="flex-1" />
               </div>
+            </div>
+            <div>
+              <Label className="text-xs">Response time (hours)</Label>
+              <Input type="number" min="0" step="0.5" data-testid="edit-vendor-response-time" value={editForm.response_time_hours}
+                onChange={(e) => setEditForm({ ...editForm, response_time_hours: e.target.value })} className="mt-1" placeholder="2" />
+              <p className="mt-1 text-[10px] text-zinc-400">Ticket moves to the Society Manager if not accepted in time. Default 2 hours.</p>
             </div>
             <div>
               <Label className="text-xs">Categories</Label>
