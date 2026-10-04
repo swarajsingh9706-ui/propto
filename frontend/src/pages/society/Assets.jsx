@@ -4,6 +4,7 @@ import { useScope, useFetch } from "@/lib/useScope";
 import { PageHeader } from "@/components/Layout";
 import { DashStat } from "@/components/DashKit";
 import { StatusBadge, PriorityBadge } from "@/components/Badges";
+import EscalationMatrix from "@/components/EscalationMatrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +39,6 @@ export default function Assets() {
   const { data, loading, reload } = useFetch("/society/assets");
   const [tab, setTab] = useState("assets");
   const [vendors, setVendors] = useState([]);
-  const [committee, setCommittee] = useState([]);
   const [tickets, setTickets] = useState([]);
 
   // dialogs
@@ -47,7 +47,6 @@ export default function Assets() {
   const [sch, setSch] = useState(null);      // { asset, next_service, service_frequency, vendor_id }
   const [tk, setTk] = useState(null);        // { asset, priority, category, description }
   const [view, setView] = useState(null);
-  const [mx, setMx] = useState(null);        // matrix array or null (closed)
   const [saving, setSaving] = useState(false);
 
   const assets = data || [];
@@ -60,7 +59,6 @@ export default function Assets() {
 
   useEffect(() => {
     api.get("/society/vendors", cfg).then((r) => setVendors(r.data)).catch(() => {});
-    api.get("/society/committee", cfg).then((r) => setCommittee(r.data)).catch(() => {});
     // eslint-disable-next-line
   }, []);
   useEffect(() => {
@@ -112,23 +110,11 @@ export default function Assets() {
   };
   const del = async (a) => { try { await api.delete(`/society/assets/${a.id}`); reload(); toast.success("Removed"); } catch (e) { toast.error(apiError(e)); } };
 
-  // Escalation matrix
-  const openMatrix = async () => {
-    try { const { data: r } = await api.get("/society/escalation-matrix", cfg); setMx(r.matrix.length ? r.matrix : []); }
-    catch (e) { toast.error(apiError(e)); }
-  };
-  const saveMatrix = async () => {
-    setSaving(true);
-    try { await api.put("/society/escalation-matrix", { matrix: mx }, cfg); toast.success("Escalation matrix saved"); setMx(null); }
-    catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
-  };
-
   const fmtDT = (s) => { const d = new Date(s); return isNaN(d) ? "—" : d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric" }); };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="assets-page">
       <PageHeader title="Assets" subtitle="Asset Register">
-        <Button data-testid="escalation-matrix-btn" variant="outline" onClick={openMatrix}><ShieldAlert className="mr-1.5 h-4 w-4" />Escalation Matrix</Button>
         <Button data-testid="add-asset-btn" onClick={() => setFe({ open: true, mode: "add", id: null, form: emptyForm })}><Plus className="mr-1.5 h-4 w-4" />Add Asset</Button>
       </PageHeader>
 
@@ -142,9 +128,10 @@ export default function Assets() {
       <div className="mb-4 flex gap-2 border-b border-border">
         <button data-testid="tab-all-assets" onClick={() => setTab("assets")} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === "assets" ? "border-brand text-brand" : "border-transparent text-zinc-500 hover:text-zinc-700"}`}>All Assets</button>
         <button data-testid="tab-asset-tickets" onClick={() => setTab("tickets")} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === "tickets" ? "border-brand text-brand" : "border-transparent text-zinc-500 hover:text-zinc-700"}`}>Asset Tickets</button>
+        <button data-testid="tab-escalation-matrix" onClick={() => setTab("matrix")} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === "matrix" ? "border-brand text-brand" : "border-transparent text-zinc-500 hover:text-zinc-700"}`}>Escalation Matrix</button>
       </div>
 
-      {tab === "assets" ? (
+      {tab === "assets" && (
         <div className="overflow-hidden rounded-xl border border-border bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="grid grid-cols-[1.4fr_1fr_1.1fr_1fr_1fr_1.2fr_44px] gap-2.5 border-b border-border bg-slate-50 px-[18px] py-2">
             {["ASSET", "TYPE", "LOCATION", "NEXT SERVICE", "STATUS", "VENDOR", ""].map((h, i) => <div key={i} className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">{h}</div>)}
@@ -177,7 +164,8 @@ export default function Assets() {
                 </div>
               ))}
         </div>
-      ) : (
+      )}
+      {tab === "tickets" && (
         <div className="overflow-x-auto rounded-xl border border-border bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]" data-testid="asset-tickets-table">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="border-b border-border bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-400">
@@ -199,6 +187,7 @@ export default function Assets() {
           </table>
         </div>
       )}
+      {tab === "matrix" && <EscalationMatrix cfg={cfg} vendors={vendors} />}
 
       {/* Add / Edit dialog */}
       <Dialog open={fe.open} onOpenChange={(o) => !o && setFe((s) => ({ ...s, open: false }))}>
@@ -300,36 +289,6 @@ export default function Assets() {
             </div>
           )}
           <DialogFooter><Button data-testid="confirm-ticket-btn" onClick={doTicket} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Raise Ticket</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Escalation matrix */}
-      <Dialog open={mx !== null} onOpenChange={(o) => !o && setMx(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-cabinet">Escalation Matrix</DialogTitle></DialogHeader>
-          <p className="text-xs text-zinc-500">Service-due WhatsApp alerts go to the asset's vendor plus these contacts, in order. If left empty, alerts go to the vendor + Society Manager (Secretary/Manager/Chairman).</p>
-          <div className="mt-3 space-y-2">
-            {(mx || []).map((lvl, idx) => (
-              <div key={idx} data-testid={`matrix-level-${idx}`} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2.5">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">{idx + 1}</span>
-                <Select value={lvl.phone || "custom"} onValueChange={(v) => {
-                  const m = committee.find((c2) => c2.phone === v);
-                  setMx((arr) => arr.map((x, i) => i === idx ? (m ? { ...x, name: m.name, phone: m.phone, role: m.role } : x) : x));
-                }}>
-                  <SelectTrigger data-testid={`matrix-contact-${idx}`} className="h-8 w-[180px] text-xs"><SelectValue placeholder="Select member" /></SelectTrigger>
-                  <SelectContent>{committee.map((cm) => <SelectItem key={cm.id} value={cm.phone || cm.id}>{cm.name} · {cm.role}</SelectItem>)}</SelectContent>
-                </Select>
-                <span className="text-xs text-zinc-500">{lvl.name || "—"}</span>
-                <div className="ml-auto flex items-center gap-1">
-                  <Input type="number" min="0" data-testid={`matrix-wait-${idx}`} value={lvl.wait_minutes} onChange={(e) => setMx((arr) => arr.map((x, i) => i === idx ? { ...x, wait_minutes: e.target.value } : x))} className="h-8 w-16 text-xs" />
-                  <span className="text-[11px] text-zinc-400">min wait</span>
-                  <button data-testid={`matrix-remove-${idx}`} onClick={() => setMx((arr) => arr.filter((_, i) => i !== idx))} className="text-zinc-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
-                </div>
-              </div>
-            ))}
-            <Button data-testid="matrix-add-level" variant="outline" size="sm" onClick={() => setMx((arr) => [...(arr || []), { name: "", phone: "", role: "", wait_minutes: 15 }])}><Plus className="mr-1.5 h-3.5 w-3.5" />Add Level</Button>
-          </div>
-          <DialogFooter><Button data-testid="save-matrix-btn" onClick={saveMatrix} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Matrix</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

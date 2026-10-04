@@ -474,6 +474,58 @@ async def put_escalation_matrix(body: dict, society_id: str = None, user: dict =
     return {"matrix": matrix}
 
 
+# ---------------- Escalation Timeline (notification rules for asset service alerts) ----------------
+DEFAULT_TIMELINE = [
+    {"key": "pre", "offset_days": 7, "direction": "before", "timing": "7 days before due date",
+     "title": "Pre-service reminder", "description": "WhatsApp reminder sent to vendor and secretary to prepare for upcoming service.",
+     "notify": ["Secretary", "Vendor"], "channel": "WhatsApp", "color": "blue"},
+    {"key": "final", "offset_days": 1, "direction": "before", "timing": "1 day before due date",
+     "title": "Final reminder", "description": "Last-minute alert to confirm vendor availability and secretary preparedness.",
+     "notify": ["Secretary", "Vendor"], "channel": "WhatsApp", "color": "amber"},
+    {"key": "overdue", "offset_days": 2, "direction": "after", "timing": "2 days after due date (if not updated)",
+     "title": "Overdue escalation", "description": "If secretary has not marked service as done, chairman is looped in for oversight.",
+     "notify": ["Secretary", "Chairman"], "channel": "WhatsApp", "color": "red"},
+    {"key": "critical", "offset_days": 7, "direction": "after", "timing": "7 days after due date (if not updated)",
+     "title": "Critical escalation", "description": "Full escalation to management. All committee members notified via WhatsApp.",
+     "notify": ["Secretary", "Chairman", "Manager"], "channel": "WhatsApp", "color": "purple"},
+]
+_VALID_ROLES = ["Secretary", "Vendor", "Chairman", "Manager"]
+
+
+@router.get("/escalation-timeline")
+async def get_escalation_timeline(society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    soc = await db.societies.find_one({"_id": ObjectId(sid)})
+    return {"timeline": (soc or {}).get("escalation_timeline") or DEFAULT_TIMELINE}
+
+
+@router.put("/escalation-timeline")
+async def put_escalation_timeline(body: dict, society_id: str = None, user: dict = Depends(require_society_admin)):
+    sid = society_id or _sid(user)
+    timeline = []
+    for r in (body.get("timeline") or []):
+        try:
+            off = int(r.get("offset_days") or 0)
+        except (TypeError, ValueError):
+            off = 0
+        direction = "after" if (r.get("direction") == "after") else "before"
+        notify = [n for n in (r.get("notify") or []) if n in _VALID_ROLES]
+        timeline.append({
+            "key": (r.get("key") or "").strip(),
+            "offset_days": off,
+            "direction": direction,
+            "timing": (r.get("timing") or "").strip(),
+            "title": (r.get("title") or "").strip(),
+            "description": (r.get("description") or "").strip(),
+            "notify": notify,
+            "channel": "WhatsApp",
+            "color": (r.get("color") or "blue").strip(),
+        })
+    await db.societies.update_one({"_id": ObjectId(sid)}, {"$set": {"escalation_timeline": timeline}})
+    await audit.log(sid, "escalation_timeline_updated", f"Escalation timeline updated ({len(timeline)} rules)", actor=_actor(user), category="asset")
+    return {"timeline": timeline}
+
+
 # ---------------- Routing mode (all complaints -> Society Manager) ----------------
 @router.get("/routing-mode")
 async def get_routing_mode(society_id: str = None, user: dict = Depends(require_society_admin)):
@@ -516,6 +568,19 @@ async def create_committee(body: dict, society_id: str = None, user: dict = Depe
     r = await db.committee.insert_one(doc)
     await audit.log(sid, "committee_added", f"{doc['name']} added to committee as {doc['role']}", actor=_actor(user), category="committee")
     return _clean({**doc, "_id": r.inserted_id})
+
+
+@router.put("/committee/{cid}")
+async def update_committee(cid: str, body: dict, user: dict = Depends(require_society_admin)):
+    upd = {k: (body.get(k) or "").strip() for k in ("name", "role", "tower", "phone", "email") if k in body}
+    if "name" in upd and not upd["name"]:
+        raise HTTPException(status_code=400, detail="Member name required")
+    await db.committee.update_one({"_id": ObjectId(cid)}, {"$set": upd})
+    doc = await db.committee.find_one({"_id": ObjectId(cid)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Member not found")
+    await audit.log(doc.get("society_id"), "committee_updated", f"{doc.get('name')} ({doc.get('role')}) updated", actor=_actor(user), category="committee")
+    return _clean(doc)
 
 
 @router.delete("/committee/{cid}")

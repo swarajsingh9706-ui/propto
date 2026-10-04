@@ -1,6 +1,13 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Feature (2026-06) — Public "View ticket details" link from WhatsApp acknowledgement
+## Feature (2026-06) — Inline Escalation Matrix / Notification Timeline on Assets page
+Replaced the Assets "Escalation Matrix" button + popup with an inline **Escalation Matrix** tab (3rd tab after All Assets / Asset Tickets) styled to match the uploaded `Propto_Admin_Dashboard Analytics.html` design.
+- `components/EscalationMatrix.jsx`: legend bar (Health / Service Status), header with bell + "Add Contact", left **Notification Timeline** of 4 colored rule cards (blue Pre-service 7d before, amber Final 1d before, red Overdue 2d after, purple Critical 7d after) each with a pencil edit; right **Committee Contacts** list (colored initials avatar, role, phone, edit/delete) + "How it works" box.
+- Backend (`society_router.py`): `GET/PUT /api/society/escalation-timeline` stores `escalation_timeline` on the society (4 rule objects: key, offset_days, direction, timing, title, description, notify[], channel, color) with `DEFAULT_TIMELINE` matching the design; added `PUT /api/society/committee/{cid}` to edit a committee member (edit was previously only add/delete).
+- Edit-rule dialog: timing label, days offset + before/after, title, description, and Notify toggles (Secretary/Vendor/Chairman/Manager). Add/Edit contact dialog writes to the committee collection.
+- Old `/escalation-matrix` endpoint retained (unused by UI). NOTE: `asset_alerts.py` still fires a single on/after-due alert and does not yet consume the new day-offset timeline rules — timeline is configured/persisted but alert scheduling is unchanged.
+- Verified: backend GET defaults, POST/PUT committee, PUT timeline via curl; screenshot of the inline tab matches the design.
+
 Each ticket's group/DM acknowledgement appends `📋 View ticket details: {PUBLIC_APP_URL}/t/{ticket_number}` (base from backend env `PUBLIC_APP_URL` = `https://manage.propto.app`). The public page is keyed by the **ticket number** (short, meaningful URL — no separate token).
 - Public, no-login endpoints in `public_router.py` (keyed by `ticket_number`):
   - `GET /api/public/ticket/{num}` — core fields; `assigned_to` prefers `vendor_name` then `assigned_to` (fixes stale display after reassign).
