@@ -140,7 +140,6 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
                         notify_to: str = None, notify_reply_to: str = None, reporter_phone: str = None):
     doc = {
         "ticket_number": gen_ticket_number(),
-        "view_token": uuid.uuid4().hex,
         "society_id": society_id,
         "resident_id": str(resident["_id"]) if resident else None,
         "resident_name": resident["name"] if resident else "Unknown",
@@ -204,7 +203,7 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
             assigned_line = "Ticket will be assigned to concern vendor or society manager."
     who = (resident["name"] + ", " if resident else "")
     base = os.environ.get("PUBLIC_APP_URL")
-    view_line = f"\n\n📋 View ticket details: {base.rstrip('/')}/t/{doc['view_token']}" if base else ""
+    view_line = f"\n\n📋 View ticket details: {base.rstrip('/')}/t/{doc['ticket_number']}" if base else ""
     confirm_msg = (
         f"✅ {who}we've logged your complaint: {doc.get('description') or doc['category']}\n"
         f"Ticket: {doc['ticket_number']}\n"

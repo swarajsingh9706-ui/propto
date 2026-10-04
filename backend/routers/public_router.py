@@ -40,7 +40,7 @@ async def join_submit(token: str, body: ResidentCreate):
 
 # ---------- Public ticket view / manage (token-scoped, no login) ----------
 async def _ticket_by_token(token: str):
-    t = await db.tickets.find_one({"view_token": token})
+    t = await db.tickets.find_one({"ticket_number": token})
     if not t:
         raise HTTPException(status_code=404, detail="This ticket link is invalid or has expired.")
     return t
@@ -75,7 +75,7 @@ async def ticket_view(token: str):
         "priority": t.get("priority") or "",
         "status": status,
         "resident_name": t.get("resident_name") or "",
-        "assigned_to": t.get("assigned_to") or t.get("vendor_name") or "",
+        "assigned_to": t.get("vendor_name") or t.get("assigned_to") or "",
         "vendor_name": t.get("vendor_name") or "",
         "created_at": t.get("created_at"),
         "can_act": status not in ("Cancelled", "Resolved"),
@@ -144,6 +144,7 @@ async def ticket_reassign(token: str, body: PublicReassign):
     ticket_for_assign = dict(t)
     ticket_for_assign["category"] = category
     await pipeline.assign_vendor(ticket_for_assign, vendor, actor="Ticket page")
+    await db.tickets.update_one({"_id": t["_id"]}, {"$set": {"assigned_to": vendor["name"], "updated_at": now_iso()}})
     await _notify_group(t, f"🔄 Ticket {tnum} has been reassigned to {vendor['name']} ({category}). They'll reach out shortly.")
     if prev_vid and str(prev_vid) != str(vendor["_id"]):
         await _notify_prev_vendor(prev_vid, tnum, t)
