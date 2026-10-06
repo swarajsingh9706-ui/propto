@@ -51,16 +51,25 @@ export default function SuperWhatsApp() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((s) => (
+              {filtered.map((s) => {
+                const connected = !!(s.whatsapp_group && s.monitoring);
+                return (
                 <button key={s.id} data-testid={`wa-society-${s.code}`} onClick={() => setSel(s.id)}
                   className="card-hover flex items-center gap-3 rounded-lg border border-border bg-card p-4 text-left">
                   <div className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary"><MessageSquare className="h-5 w-5 text-zinc-700" /></div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h3 className="truncate font-cabinet text-base font-bold tracking-tight">{s.name}</h3>
                     <p className="text-xs text-zinc-400">{s.code} · {s.city || "—"}</p>
                   </div>
+                  <span data-testid={`wa-status-${s.code}`}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                      connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-100 text-zinc-600"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-zinc-400"}`} />
+                    {connected ? "Active" : "Disabled"}
+                  </span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
