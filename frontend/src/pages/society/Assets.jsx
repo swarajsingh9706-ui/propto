@@ -114,7 +114,7 @@ export default function Assets() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="assets-page">
-      <PageHeader title="Assets" subtitle="Asset Register">
+      <PageHeader title="Assets" subtitle="Asset Register" description="Manage all building assets and track maintenance">
         <Button data-testid="add-asset-btn" onClick={() => setFe({ open: true, mode: "add", id: null, form: emptyForm })}><Plus className="mr-1.5 h-4 w-4" />Add Asset</Button>
       </PageHeader>
 

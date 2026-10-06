@@ -1,6 +1,8 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Feature (2026-06) — Vendor flow overhaul + response-time SLA
+## Feature (2026-06) — Page header descriptions
+Added a `description` prop to the shared `PageHeader` (Layout.jsx) rendered under the title. Set per page: Assets "Manage all building assets and track maintenance"; Vendors "Manage vendors to automatically assign the tickets"; Residents "Manage all residents and their details" (+ amber banner "{n} resident(s) awaiting verification — Review and approve or reject…" shown only when pending > 0); Society Committee "Manage committee members used for escalation alerts"; Reports "Monthly performance data"; Resident Suggestions "Community suggestions with live voting"; Notifications "Stay updated with important alerts"; Audit Log "Track record of every action"; Escalated Tickets "Tickets that need your manual assignment".
+
 - **Removed "Suggest Time"** vendor button — vendors now get only **Accept** / **Reject** (pipeline `assign_vendor`). Dropped the `vendor_time_` button handler and the `awaiting_vendor_time` direct-reply branch.
 - **On Accept** (`whatsapp_router._vendor_action`): vendor gets a confirmation DM with the complaint raiser's **name, phone, flat, society name** and the issue text; the **customer** is sent the vendor's contact (name + phone) personally.
 - **On Reject**: vendor gets a decline confirmation; ticket reassigns to the next available vendor by priority; if none exist it is assigned to the **Society Manager**. Group is notified.

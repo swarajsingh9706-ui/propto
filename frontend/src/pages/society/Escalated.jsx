@@ -89,7 +89,7 @@ export default function Escalated() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="escalated-page">
-      <PageHeader title="Escalated Tickets" subtitle="Needs Manual Action">
+      <PageHeader title="Escalated Tickets" subtitle="Needs Manual Action" description="Tickets that need your manual assignment">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-600" data-testid="escalated-count">
           <AlertTriangle className="h-3.5 w-3.5" />{rows.length} pending
         </span>

@@ -57,7 +57,7 @@ export default function AuditLog() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader title="Audit Log" subtitle="Activity Trail">
+      <PageHeader title="Audit Log" subtitle="Activity Trail" description="Track record of every action">
         <DateRangeFilter onChange={setRange} testidPrefix="audit-range" />
       </PageHeader>
 

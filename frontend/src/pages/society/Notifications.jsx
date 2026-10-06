@@ -61,7 +61,7 @@ export default function Notifications() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader title="Notifications" subtitle="Alerts & Reminders">
+      <PageHeader title="Notifications" subtitle="Alerts & Reminders" description="Stay updated with important alerts">
         <Button data-testid="mark-all-read-btn" variant="outline" onClick={markAllRead} disabled={!unread}>
           <CheckCheck className="mr-1.5 h-4 w-4" /> Mark all read
         </Button>

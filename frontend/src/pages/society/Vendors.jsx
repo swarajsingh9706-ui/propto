@@ -186,7 +186,7 @@ export default function Vendors() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader title="Vendor Management" subtitle="Vendors">
+      <PageHeader title="Vendor Management" subtitle="Vendors" description="Manage vendors to automatically assign the tickets">
         <button
           data-testid="routing-mode-toggle"
           onClick={toggleRouting}

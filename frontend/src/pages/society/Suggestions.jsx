@@ -80,7 +80,7 @@ export default function Suggestions() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader title="Resident Suggestions" subtitle="Community Voting">
+      <PageHeader title="Resident Suggestions" subtitle="Community Voting" description="Community suggestions with live voting">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button data-testid="add-suggestion-btn"><Plus className="mr-1.5 h-4 w-4" /> Add Suggestion</Button>

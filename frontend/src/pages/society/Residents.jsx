@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Loader2, Trash2, Upload, Users, Search, Copy, Link2, Check, X, Pencil } from "lucide-react";
+import { Plus, Loader2, Trash2, Upload, Users, Search, Copy, Link2, Check, X, Pencil, ShieldCheck } from "lucide-react";
 import { COUNTRY_CODES, splitPhone } from "@/lib/countryCodes";
 
 const empty = { name: "", dial: "91", phone: "", flat: "", tower: "", status: "Owner" };
@@ -105,7 +105,7 @@ export default function Residents() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader title="Resident Management" subtitle="Residents">
+      <PageHeader title="Resident Management" subtitle="Residents" description="Manage all residents and their details">
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importFile} className="hidden" data-testid="import-file-input" />
         <Button data-testid="import-residents-btn" variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-1.5 h-4 w-4" />Import Excel</Button>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -140,6 +140,15 @@ export default function Residents() {
           </DialogContent>
         </Dialog>
       </PageHeader>
+
+      {pending.length > 0 && (
+        <div data-testid="residents-pending-banner" className="mb-5 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+          <p className="text-[13px] text-amber-800">
+            <b>{pending.length} resident{pending.length > 1 ? "s" : ""} awaiting verification</b> — Review and approve or reject their society membership below.
+          </p>
+        </div>
+      )}
 
       {/* Shareable resident registration form link */}
       <div className="mb-5 rounded-xl border border-border bg-gradient-to-r from-blue-50 to-indigo-50 p-4" data-testid="resident-form-banner">

@@ -40,7 +40,7 @@ export default function Committee() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="committee-page">
-      <PageHeader title="Society Committee" subtitle="Managing Committee">
+      <PageHeader title="Society Committee" subtitle="Managing Committee" description="Manage committee members used for escalation alerts">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button data-testid="add-committee-btn"><Plus className="mr-1.5 h-4 w-4" />Add Member</Button></DialogTrigger>
           <DialogContent>

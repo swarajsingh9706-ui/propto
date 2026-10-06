@@ -49,7 +49,7 @@ export default function Reports() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader title="Reports & Analytics" subtitle="Society Insights">
+      <PageHeader title="Reports & Analytics" subtitle="Society Insights" description="Monthly performance data">
         <DateRangeFilter onChange={setRange} testidPrefix="reports-range" />
         <Dialog open={shareOpen} onOpenChange={setShareOpen}>
           <DialogTrigger asChild>

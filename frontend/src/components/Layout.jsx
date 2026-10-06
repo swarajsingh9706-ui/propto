@@ -151,12 +151,13 @@ export default function Layout({ children }) {
   );
 }
 
-export function PageHeader({ title, subtitle, children }) {
+export function PageHeader({ title, subtitle, description, children }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 sm:mb-8">
       <div>
         <p className="overline mb-1">{subtitle}</p>
         <h1 className="font-cabinet text-2xl font-bold tracking-tight text-brand sm:text-3xl">{title}</h1>
+        {description && <p className="mt-1.5 text-sm text-zinc-500">{description}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
