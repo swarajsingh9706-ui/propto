@@ -10,24 +10,24 @@ import {
 import { Button } from "@/components/ui/button";
 
 const SUPER_NAV = [
-  { to: "/super/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/super/societies", label: "Societies", icon: Building2 },
-  { to: "/super/whatsapp", label: "WhatsApp", icon: MessageSquare },
-  { to: "/super/reports", label: "Analytics", icon: BarChart3 },
+  { to: "/super/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "#2563eb" },
+  { to: "/super/societies", label: "Societies", icon: Building2, color: "#059669" },
+  { to: "/super/whatsapp", label: "WhatsApp", icon: MessageSquare, color: "#16a34a" },
+  { to: "/super/reports", label: "Analytics", icon: BarChart3, color: "#7c3aed" },
 ];
 const SOCIETY_NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/tickets", label: "Tickets", icon: Ticket },
-  { to: "/escalated", label: "Escalated Tickets", icon: AlertTriangle },
-  { to: "/suggestions", label: "Resident Suggestions", icon: Lightbulb },
-  { to: "/assets", label: "Assets", icon: Package },
-  { to: "/reports", label: "Reports", icon: BarChart3 },
-  { to: "/committee", label: "Society Committee", icon: Building2 },
-  { to: "/residents", label: "Residents", icon: Users },
-  { to: "/vendors", label: "Vendors", icon: HardHat },
-  { to: "/ai-activity", label: "AI Activity", icon: Bot },
-  { to: "/notifications", label: "Notifications", icon: Bell },
-  { to: "/audit", label: "Audit Log", icon: ScrollText },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "#2563eb" },
+  { to: "/tickets", label: "Tickets", icon: Ticket, color: "#7c3aed" },
+  { to: "/escalated", label: "Escalated Tickets", icon: AlertTriangle, color: "#dc2626" },
+  { to: "/suggestions", label: "Resident Suggestions", icon: Lightbulb, color: "#d97706" },
+  { to: "/assets", label: "Assets", icon: Package, color: "#059669" },
+  { to: "/reports", label: "Reports", icon: BarChart3, color: "#0891b2" },
+  { to: "/committee", label: "Society Committee", icon: Building2, color: "#4f46e5" },
+  { to: "/residents", label: "Residents", icon: Users, color: "#db2777" },
+  { to: "/vendors", label: "Vendors", icon: HardHat, color: "#ea580c" },
+  { to: "/ai-activity", label: "AI Activity", icon: Bot, color: "#0d9488" },
+  { to: "/notifications", label: "Notifications", icon: Bell, color: "#ca8a04" },
+  { to: "/audit", label: "Audit Log", icon: ScrollText, color: "#9333ea" },
 ];
 
 export default function Layout({ children }) {
@@ -106,15 +106,19 @@ export default function Layout({ children }) {
               onClick={() => setOpen(false)}
               data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive ? "bg-brand-green text-white" : "text-zinc-600 hover:bg-secondary"
+                `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                  isActive ? "bg-brand-green text-white" : "text-zinc-700 hover:bg-secondary"
                 }`
               }
             >
-              <item.icon className="h-4 w-4" strokeWidth={1.75} />
-              {item.label}
-              {item.to === "/notifications" && unread > 0 && (
-                <span data-testid="nav-notif-badge" className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread}</span>
+              {({ isActive }) => (
+                <>
+                  <item.icon className="h-5 w-5 flex-shrink-0" strokeWidth={2} style={{ color: isActive ? "#fff" : item.color }} />
+                  <span>{item.label}</span>
+                  {item.to === "/notifications" && unread > 0 && (
+                    <span data-testid="nav-notif-badge" className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread}</span>
+                  )}
+                </>
               )}
             </NavLink>
           ))}

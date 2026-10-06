@@ -5,6 +5,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+    font-size: 17px;
+}
+
 body {
     margin: 0;
     font-family: "IBM Plex Sans", sans-serif;
@@ -31,7 +35,7 @@ code, .font-mono {
         --secondary: 210 24% 90%;
         --secondary-foreground: 222 47% 20%;
         --muted: 210 40% 96%;
-        --muted-foreground: 215 16% 47%;
+        --muted-foreground: 215 25% 35%;
         --accent: 214 95% 93%;
         --accent-foreground: 221 83% 40%;
         --destructive: 0 72% 51%;
@@ -60,7 +64,15 @@ code, .font-mono {
     font-size: 0.6875rem;
     letter-spacing: 0.12em;
     font-weight: 700;
-    color: #94a3b8;
+    color: #475569;
+}
+
+/* Darken light/medium grey text globally for better readability */
+.text-slate-400, .text-slate-500,
+.text-zinc-400, .text-zinc-500,
+.text-gray-400, .text-gray-500,
+.text-muted-foreground {
+    color: #475569 !important;
 }
 
 .text-gold { color: #4f46e5; }
