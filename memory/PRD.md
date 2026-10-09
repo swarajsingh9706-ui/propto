@@ -1,6 +1,11 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Feature (2026-06) — Page header descriptions
+## Feature (2026-06) — Self-service Change Password
+- Top-right **Change Password** button added to the dashboard top header (`components/DashKit.jsx` `TopHeader`) — navigates to a dedicated page (not a popup).
+- New page `pages/society/ChangePassword.jsx` at route `/change-password` (Protected): shows the logged-in user's **email (read-only, non-editable)**, **New password**, and **Confirm new password** fields.
+- Backend `POST /api/auth/change-password` (authenticated via JWT `get_current_user`): validates min length 6 + new==confirm, hashes with existing bcrypt `hash_password`, updates `users.password_hash`. Added `ChangePasswordRequest` model. Per user request, the current password is NOT required.
+- Verified via curl (mismatch→400, change→new login 200, restore original) and screenshot.
+
 Added a `description` prop to the shared `PageHeader` (Layout.jsx) rendered under the title. Set per page: Assets "Manage all building assets and track maintenance"; Vendors "Manage vendors to automatically assign the tickets"; Residents "Manage all residents and their details" (+ amber banner "{n} resident(s) awaiting verification — Review and approve or reject…" shown only when pending > 0); Society Committee "Manage committee members used for escalation alerts"; Reports "Monthly performance data"; Resident Suggestions "Community suggestions with live voting"; Notifications "Stay updated with important alerts"; Audit Log "Track record of every action"; Escalated Tickets "Tickets that need your manual assignment".
 
 - **Removed "Suggest Time"** vendor button — vendors now get only **Accept** / **Reject** (pipeline `assign_vendor`). Dropped the `vendor_time_` button handler and the `awaiting_vendor_time` direct-reply branch.

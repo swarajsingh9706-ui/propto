@@ -1,7 +1,9 @@
-import { Search, Bell } from "lucide-react";
+import { Search, Bell, KeyRound } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 // Sticky top header shown on dashboards
 export function TopHeader({ greeting, subtitle }) {
+  const navigate = useNavigate();
   return (
     <div
       data-testid="dash-topheader"
@@ -15,6 +17,13 @@ export function TopHeader({ greeting, subtitle }) {
         <div className="hidden items-center gap-2 rounded-[9px] border border-border bg-slate-50 px-3.5 py-2 text-[13px] text-slate-500 sm:flex">
           <Search className="h-4 w-4" /> <span>Search tickets, vendors…</span>
         </div>
+        <button
+          data-testid="change-password-btn"
+          onClick={() => navigate("/change-password")}
+          className="flex items-center gap-1.5 rounded-[9px] border border-border bg-slate-50 px-3 py-2 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+        >
+          <KeyRound className="h-4 w-4 text-brand" /> <span className="hidden sm:inline">Change Password</span>
+        </button>
         <div className="relative flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-full border border-border bg-slate-50">
           <Bell className="h-[17px] w-[17px] text-slate-500" />
           <span className="absolute right-[3px] top-[3px] h-[9px] w-[9px] rounded-full border-2 border-white bg-red-600" />

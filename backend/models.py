@@ -39,6 +39,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    new_password: str
+    confirm_password: str
+
+
 class UserPublic(BaseModel):
     id: str
     email: str

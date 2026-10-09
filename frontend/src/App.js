@@ -24,6 +24,7 @@ import AssignmentLogic from "@/pages/society/AssignmentLogic";
 import Suggestions from "@/pages/society/Suggestions";
 import AuditLog from "@/pages/society/AuditLog";
 import Reports from "@/pages/society/Reports";
+import ChangePassword from "@/pages/society/ChangePassword";
 import Join from "@/pages/public/Join";
 import TicketView from "@/pages/public/TicketView";
 
@@ -75,6 +76,7 @@ function App() {
             <Route path="/suggestions" element={<Protected><Suggestions /></Protected>} />
             <Route path="/audit" element={<Protected><AuditLog /></Protected>} />
             <Route path="/reports" element={<Protected><Reports /></Protected>} />
+            <Route path="/change-password" element={<Protected><ChangePassword /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

@@ -3,8 +3,8 @@ from bson import ObjectId
 from datetime import datetime, timezone
 
 from db import db
-from models import LoginRequest
-from auth_utils import verify_password, create_access_token, get_current_user
+from models import LoginRequest, ChangePasswordRequest
+from auth_utils import verify_password, create_access_token, get_current_user, hash_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -48,3 +48,14 @@ async def logout(response: Response):
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
     return await _public(user)
+
+
+@router.post("/change-password")
+async def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if body.new_password != body.confirm_password:
+        raise HTTPException(status_code=400, detail="New password and confirmation do not match")
+    uid = user.get("id") or user.get("_id")
+    await db.users.update_one({"_id": ObjectId(uid)}, {"$set": {"password_hash": hash_password(body.new_password)}})
+    return {"status": "ok"}
