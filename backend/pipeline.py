@@ -173,7 +173,7 @@ async def _committee_chain(society_id: str):
     return chain
 
 
-async def escalate_to_committee(ticket: dict, after_priority: int = 0, reason: str = ""):
+async def escalate_to_committee(ticket: dict, after_priority: int = 0, reason: str = "", announce_group: bool = True):
     """Route a ticket to the next committee member in the escalation chain (by
     priority). Returns the assigned member, or None if the chain is exhausted."""
     tid = str(ticket["_id"])
@@ -190,7 +190,7 @@ async def escalate_to_committee(ticket: dict, after_priority: int = 0, reason: s
                       "status": "Pending", "updated_at": now_iso()}},
         )
         await add_timeline(tid, "Escalation exhausted", reason or "No further committee escalation available")
-        if gid:
+        if gid and announce_group:
             await wa.send_text(gid, f"⚠️ {num} needs manual assignment — the escalation chain is exhausted.", reply_to=ticket.get("source_message_id"))
         return None
     p, m = nxt
@@ -211,7 +211,7 @@ async def escalate_to_committee(ticket: dict, after_priority: int = 0, reason: s
     await add_timeline(tid, f"Escalated to {m.get('role')}", (f"{reason} — " if reason else "") + f"Assigned to {label} (respond within {acc:g}h)")
     await audit.log(ticket.get("society_id"), "ticket_escalated_committee",
                     f"{num} escalated to {label}", actor="PROPTO", category="ticket", ticket_number=num)
-    if gid:
+    if gid and announce_group:
         await wa.send_text(gid, f"🔔 {num} has been escalated to {label}.", reply_to=ticket.get("source_message_id"))
     if m.get("phone"):
         _fire(wa.send_buttons(
@@ -321,14 +321,11 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
     handled_by = doc["handled_by"]
     vendor = None
     if manager_only or handled_by == "Society Manager":
-        await db.tickets.update_one({"_id": doc["_id"]}, {"$set": {"status": "Pending", "assigned_to": "Society Manager", "updated_at": now_iso()}})
-        doc["status"] = "Pending"
-        doc["assigned_to"] = "Society Manager"
-        await add_timeline(tid, "Assigned to Society Manager", "Handled in-house by the society manager")
-        await audit.log(society_id, "ticket_assigned_manager",
-                        f"{doc['ticket_number']} routed to the Society Manager (in-house)",
-                        actor="AI (taxonomy)", category="ticket", ticket_number=doc["ticket_number"])
-        assigned_line = "Assigned to: Society Manager (handled in-house)."
+        member = await escalate_to_committee(doc, after_priority=0, reason="Routed to the society manager", announce_group=False)
+        if member:
+            assigned_line = f"Assigned to: {member.get('name')} ({member.get('role')}) — awaiting their acceptance."
+        else:
+            assigned_line = "Assigned to: Society Manager — pending acceptance."
     else:
         routing_cat = ai.get("routing_category") or doc["category"]
         vendor = await pick_vendor(society_id, routing_cat)

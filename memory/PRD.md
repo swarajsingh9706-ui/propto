@@ -1,6 +1,9 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Bug fix (2026-06) — Accept/Reject buttons did nothing (Whapi `ButtonsV3:` prefix)
+## Bug fix (2026-06) — Society-Manager tickets auto-"accepted" without acceptance
+Previously the manager-only / "Handled By: Society Manager" branch in `create_ticket` immediately marked the ticket handled-in-house (no acceptance step), so it looked auto-accepted. Now that branch calls `escalate_to_committee(doc, after_priority=0, announce_group=False)` — the ticket is assigned to the Society Manager committee member with Accept/Reject buttons and a `response_due_at` timer; `committee_accepted` stays False until they actually accept. If not accepted within their acceptance window, `check_vendor_timeouts` escalates to the next member (Secretary → …). Added an `announce_group` flag to `escalate_to_committee` so the initial routing doesn't double-post to the group (the creation ack already states the assignee). Requires a committee member with role "Society Manager"; if the chain is empty it falls back to the "Society Manager — pending acceptance" label.
+Verified via `tests/manager_routing_probe.py`: new manager ticket → status Pending, committee_role=Society Manager, committee_accepted=False, response_due_at set.
+
 Root cause (found via live `journalctl`): Whapi sends interactive quick-reply ids prefixed with `ButtonsV3:` (e.g. `ButtonsV3:vendor_accept_<tid>`). `_handle_button` matched with `button_id.startswith("vendor_accept_")`, which failed because of the prefix, so NO branch ran — vendor/committee Accept/Reject/Resolve taps were silently ignored and ticket status never changed.
 Fix (`routers/whatsapp_router._handle_button`): strip any leading `prefix:` (`button_id.split(":",1)[1]`) before matching. Verified end-to-end by POSTing a `ButtonsV3:`-prefixed reply payload to `/api/whapi/webhook/send` → `vendor_accepted=True`.
 NOTE: on the VPS the `propto-worker` process must be restarted after deploy to load this fix (it imports `process_whapi` at startup).
