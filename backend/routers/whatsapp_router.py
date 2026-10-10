@@ -408,9 +408,11 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
                 await _apply_poll_results(m, create_if_missing=(role == "read"))
                 continue
             group_chat_id = m.get("group_chat_id")
-            # Role routing: reader handles group chatter; sender handles DMs/buttons.
-            if role == "read" and not group_chat_id:
-                continue
+            # The READER drives the group AI pipeline; the SENDER's own group echoes are
+            # ignored. DM replies (vendor/committee Accept/Reject/Resolve/Done) can arrive
+            # on EITHER Whapi account, so they are handled on both roles and de-duplicated
+            # by message id below. (Previously the reader dropped all DMs, so vendor
+            # replies landing on the reader account were silently lost.)
             if role == "send" and group_chat_id and m.get("text") and not m.get("button_id"):
                 continue
             society = None
@@ -428,7 +430,13 @@ async def process_whapi(payload: dict, method: str = "POST", role: str = "read")
             if not society:
                 continue
             sid = str(society["_id"])
+            if not group_chat_id and m.get("id"):
+                dup = await db.wa_processed.update_one({"_id": str(m["id"])}, {"$setOnInsert": {"at": now_iso()}}, upsert=True)
+                if dup.upserted_id is None:
+                    logger.info("Whapi[%s]: duplicate DM %s skipped", role, m.get("id"))
+                    continue
             if m.get("button_id"):
+                logger.info("Whapi[%s]: button '%s' from %s", role, m.get("button_id"), m.get("from"))
                 await _handle_button(sid, m["from"], m["button_id"])
             elif group_chat_id and m.get("text"):
                 # Reply "cancel" (any case) quoting the ticket -> cancel it (creator or manager only).
@@ -500,6 +508,7 @@ async def _handle_cancel(society_id: str, phone: str, quoted_id: str, group_chat
 async def _handle_direct_reply(society_id: str, phone: str, text: str):
     t = text.strip().lower()
     vendor = await db.vendors.find_one({"society_id": society_id, "phone": {"$regex": phone[-10:] + "$"}})
+    logger.info("direct reply from %s text=%.30s vendor=%s", phone, t, vendor.get("name") if vendor else None)
     if vendor:
         job = await db.tickets.find_one({"vendor_id": str(vendor["_id"]), "status": {"$in": ["Open", "Pending"]}}, sort=[("updated_at", -1)])
         if job:

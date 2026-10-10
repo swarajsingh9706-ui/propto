@@ -1,6 +1,10 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Feature (2026-06) — Committee escalation chain (priority + acceptance time)
+## Bug fix (2026-06) — Vendor reject/accept dropped on reader webhook
+Root cause: `process_whapi` skipped every non-group message when `role == "read"` (`if role == "read" and not group_chat_id: continue`). Vendor/committee Accept/Reject/Done DM replies that arrived on the reader account — or text-fallback replies when Whapi interactive buttons fail — were silently dropped, so ticket status never updated and escalation never fired.
+Fix (`routers/whatsapp_router.py`): DM replies are now processed on BOTH reader and sender webhooks, de-duplicated by message id via a `wa_processed` collection (upsert `$setOnInsert`; skip if not newly inserted). Added logging in the button dispatch and `_handle_direct_reply`. Group AI pipeline still runs only on the reader; the sender's own group echoes are still ignored.
+Verified with `tests/reject_routing_probe.py`: a "Reject" DM delivered via the reader webhook clears the vendor, escalates into the committee chain, and a duplicate (same id on the sender webhook) is skipped.
+
 - Committee members now have **`priority`** (escalation order, nullable) and **`acceptance_time_hours`** (default 2). Shown in the Committee Add/Edit dialog for every role EXCEPT **Member**; displayed on each card. Committee page gained an **Edit** dialog (was add/delete only). Persisted by `society_router` committee POST/PUT.
 - Default/effective priority (`pipeline._eff_priority`): Society Manager = 1, Secretary = 2 (or **1 when no Society Manager exists**); other roles have no default; Member never gets one. Admin can override with an explicit number.
 - Escalation flow: when a **vendor doesn't accept** in its window (or rejects with no other vendor), the ticket escalates into the committee chain — **Society Manager first, then Secretary**, by priority. Each assignee has its own acceptance window; no accept in time → next member. Chain exhausted → "Society Manager" label needing manual action (`pipeline.escalate_to_committee`, `_committee_chain`).
