@@ -16,10 +16,10 @@ const CARD = {
   purple: { bg: "#f5f3ff", border: "#ddd6fe", pillBg: "#ede9fe", pillText: "#7c3aed", icon: "#7c3aed", iconBg: "#ede9fe", rail: "#7c3aed" },
 };
 const RULE_ICON = { pre: CalendarClock, final: Clock, overdue: AlertTriangle, critical: Flame };
-const ROLE_COLOR = { Secretary: "#2563eb", Vendor: "#0d9488", Chairman: "#7c3aed", Manager: "#d97706", Member: "#64748b" };
+const ROLE_COLOR = { Secretary: "#2563eb", Vendor: "#0d9488", Chairman: "#7c3aed", Manager: "#d97706", "Society Manager": "#ea580c", Member: "#64748b" };
 const COLORS = ["blue", "amber", "red", "purple"];
 const ALL_ROLES = ["Secretary", "Vendor", "Chairman", "Manager"];
-const CONTACT_ROLES = ["Secretary", "Chairman", "Manager", "Member", "Vendor"];
+const CONTACT_ROLES = ["Secretary", "Chairman", "Society Manager", "Manager", "Member", "Vendor"];
 
 const initials = (n) => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 

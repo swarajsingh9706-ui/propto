@@ -11,11 +11,12 @@ import { toast } from "sonner";
 import { Plus, Loader2, UsersRound, Trash2, Phone, Mail } from "lucide-react";
 import { COUNTRY_CODES } from "@/lib/countryCodes";
 
-const ROLES = ["Chairman", "Secretary", "Treasurer", "Vice Chairman", "Joint Secretary", "Member"];
+const ROLES = ["Chairman", "Secretary", "Treasurer", "Vice Chairman", "Joint Secretary", "Society Manager", "Member"];
 const ROLE_COLOR = {
   Chairman: ["#eff6ff", "#2563eb", "#bfdbfe"],
   Secretary: ["#f5f3ff", "#7c3aed", "#ddd6fe"],
   Treasurer: ["#ecfdf5", "#059669", "#a7f3d0"],
+  "Society Manager": ["#fff7ed", "#ea580c", "#fed7aa"],
 };
 const empty = { name: "", role: "Member", tower: "", dial: "91", phone: "", email: "" };
 
