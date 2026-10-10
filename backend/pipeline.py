@@ -139,6 +139,7 @@ async def assign_to_manager(ticket: dict, reason: str = ""):
     await db.tickets.update_one(
         {"_id": ObjectId(tid)},
         {"$set": {"vendor_id": None, "vendor_name": None, "assigned_to": "Society Manager",
+                  "committee_assignee_id": None, "committee_priority": None, "committee_accepted": False,
                   "status": "Pending", "vendor_accepted": False, "response_due_at": None,
                   "updated_at": now_iso()}},
     )
@@ -148,31 +149,112 @@ async def assign_to_manager(ticket: dict, reason: str = ""):
                     actor="PROPTO", category="ticket", ticket_number=ticket.get("ticket_number"))
 
 
+def _eff_priority(member: dict, has_manager: bool):
+    p = member.get("priority")
+    if isinstance(p, (int, float)) and p and p > 0:
+        return int(p)
+    role = member.get("role")
+    if role == "Society Manager":
+        return 1
+    if role == "Secretary":
+        return 1 if not has_manager else 2
+    return None
+
+
+async def _committee_chain(society_id: str):
+    members = await db.committee.find({"society_id": society_id}).to_list(200)
+    has_manager = any(m.get("role") == "Society Manager" for m in members)
+    chain = []
+    for m in members:
+        ep = _eff_priority(m, has_manager)
+        if ep is not None:
+            chain.append((ep, m))
+    chain.sort(key=lambda x: x[0])
+    return chain
+
+
+async def escalate_to_committee(ticket: dict, after_priority: int = 0, reason: str = ""):
+    """Route a ticket to the next committee member in the escalation chain (by
+    priority). Returns the assigned member, or None if the chain is exhausted."""
+    tid = str(ticket["_id"])
+    num = ticket.get("ticket_number")
+    chain = await _committee_chain(ticket["society_id"])
+    nxt = next(((p, m) for (p, m) in chain if p > after_priority), None)
+    gid = await _society_group(ticket["society_id"])
+    if not nxt:
+        await db.tickets.update_one(
+            {"_id": ObjectId(tid)},
+            {"$set": {"vendor_id": None, "vendor_name": None, "assigned_to": "Society Manager",
+                      "committee_assignee_id": None, "committee_priority": None,
+                      "committee_accepted": False, "response_due_at": None,
+                      "status": "Pending", "updated_at": now_iso()}},
+        )
+        await add_timeline(tid, "Escalation exhausted", reason or "No further committee escalation available")
+        if gid:
+            await wa.send_text(gid, f"⚠️ {num} needs manual assignment — the escalation chain is exhausted.", reply_to=ticket.get("source_message_id"))
+        return None
+    p, m = nxt
+    try:
+        acc = float(m.get("acceptance_time_hours") or 2)
+    except (TypeError, ValueError):
+        acc = 2.0
+    due = (datetime.now(timezone.utc) + timedelta(hours=acc)).isoformat()
+    label = f"{m.get('name')} ({m.get('role')})"
+    await db.tickets.update_one(
+        {"_id": ObjectId(tid)},
+        {"$set": {"vendor_id": None, "vendor_name": None, "assigned_to": label,
+                  "committee_assignee_id": str(m["_id"]), "committee_assignee_name": m.get("name"),
+                  "committee_assignee_role": m.get("role"), "committee_priority": p,
+                  "committee_accepted": False, "response_due_at": due,
+                  "status": "Pending", "updated_at": now_iso()}},
+    )
+    await add_timeline(tid, f"Escalated to {m.get('role')}", (f"{reason} — " if reason else "") + f"Assigned to {label} (respond within {acc:g}h)")
+    await audit.log(ticket.get("society_id"), "ticket_escalated_committee",
+                    f"{num} escalated to {label}", actor="PROPTO", category="ticket", ticket_number=num)
+    if gid:
+        await wa.send_text(gid, f"🔔 {num} has been escalated to {label}.", reply_to=ticket.get("source_message_id"))
+    if m.get("phone"):
+        _fire(wa.send_buttons(
+            m["phone"],
+            f"Escalation — {ticket.get('category')} at Flat {ticket.get('flat','?')} ({ticket.get('priority')} priority). {ticket.get('description')}\nTicket {num}. Please Accept to take ownership.",
+            [{"id": f"committee_accept_{tid}", "title": "Accept"},
+             {"id": f"committee_reject_{tid}", "title": "Reject"}],
+        ))
+    return m
+
+
 async def check_vendor_timeouts():
-    """Reassign tickets to the Society Manager when the assigned vendor did not
-    accept within their response-time window. Meant to run periodically (cron)."""
+    """Escalate tickets whose current assignee (vendor OR committee member) did not
+    accept within their response/acceptance window. Meant to run periodically (cron)."""
     now = datetime.now(timezone.utc).isoformat()
-    tickets = await db.tickets.find({
+    count = 0
+    # 1) Vendor did not accept in time -> escalate into the committee chain.
+    vts = await db.tickets.find({
         "status": "Pending", "vendor_accepted": {"$ne": True},
         "vendor_id": {"$ne": None}, "response_due_at": {"$ne": None, "$lt": now},
     }).to_list(500)
-    count = 0
-    for t in tickets:
+    for t in vts:
         prev_vid = t.get("vendor_id")
         num = t.get("ticket_number")
-        await assign_to_manager(t, reason="Vendor response time exceeded")
-        gid = await _society_group(t["society_id"])
-        try:
-            if gid:
-                await wa.send_text(gid, f"⏱️ Ticket {num} was not accepted in time and has been assigned to the Society Manager.", reply_to=t.get("source_message_id"))
-            if prev_vid:
+        await escalate_to_committee(t, after_priority=0, reason="Vendor response time exceeded")
+        if prev_vid:
+            try:
                 v = await db.vendors.find_one({"_id": ObjectId(prev_vid)})
                 if v and v.get("phone"):
                     await wa.send_text(v["phone"], f"⏱️ Ticket {num} was reassigned because the response time elapsed. No action is required.")
-        except Exception as e:
-            logger.warning("vendor timeout notify failed for %s: %s", num, e)
+            except Exception as e:
+                logger.warning("vendor timeout notify failed for %s: %s", num, e)
         count += 1
-    logger.info("vendor timeout check complete: %d reassigned", count)
+    # 2) Committee member did not accept in time -> escalate to the next member.
+    cts = await db.tickets.find({
+        "status": "Pending", "committee_assignee_id": {"$ne": None},
+        "committee_accepted": {"$ne": True}, "response_due_at": {"$ne": None, "$lt": now},
+    }).to_list(500)
+    for t in cts:
+        await escalate_to_committee(t, after_priority=(t.get("committee_priority") or 0),
+                                    reason=f"{t.get('committee_assignee_role') or 'Assignee'} did not respond in time")
+        count += 1
+    logger.info("response timeout check complete: %d escalated", count)
     return {"reassigned": count}
 
 

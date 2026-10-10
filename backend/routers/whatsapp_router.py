@@ -162,9 +162,7 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
             if gid:
                 await wa.send_text(gid, f"🔄 {num} is being reassigned to {newv['name']}.", reply_to=quote)
         else:
-            await pipeline.assign_to_manager(fresh, reason="No other vendor available after rejection")
-            if gid:
-                await wa.send_text(gid, f"🔄 {num} has been assigned to the Society Manager (no other vendor available).", reply_to=quote)
+            await pipeline.escalate_to_committee(fresh, after_priority=0, reason="No other vendor available after rejection")
 
     elif action == "resolve":
         await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Resolved", "response_due_at": None, "updated_at": now_iso()}})
@@ -263,12 +261,49 @@ async def _vote_suggestion(sug_id: str, phone: str, vote: str):
     await db.suggestions.update_one({"_id": s["_id"]}, {"$set": {"voters": voters, "yes_votes": yes, "no_votes": no, "updated_at": now_iso()}})
 
 
+async def _committee_action(society_id: str, phone: str, tid: str, action: str):
+    try:
+        ticket = await db.tickets.find_one({"_id": ObjectId(tid)})
+    except Exception:
+        ticket = None
+    if not ticket:
+        return
+    num = ticket.get("ticket_number"); cat = ticket.get("category"); flat = ticket.get("flat") or "—"
+    role = ticket.get("committee_assignee_role") or "Committee member"
+    mname = ticket.get("committee_assignee_name") or role
+    if action == "accept":
+        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"committee_accepted": True, "response_due_at": None, "updated_at": now_iso()}})
+        await pipeline.add_timeline(tid, f"{role} Accepted", f"{mname} accepted the escalation")
+        await audit.log(society_id, "committee_accepted", f"{mname} ({role}) accepted {num}", actor=mname, category="ticket", ticket_number=num)
+        soc = await db.societies.find_one({"_id": ObjectId(society_id)})
+        soc_name = (soc or {}).get("name") or "the society"
+        rname = ticket.get("resident_name") or "Resident"
+        rphone = ticket.get("reporter_phone") or ticket.get("resident_phone") or "—"
+        await _ack(phone,
+                   f"👍 You've *accepted* {num} ({cat}).\n"
+                   f"Raised by: {rname}\nPhone: {rphone}\nFlat: {flat}\nSociety: {soc_name}\n"
+                   f"Issue: {ticket.get('description') or cat}\n\nReply *DONE* once resolved.")
+        gid = await _group_chat_id(society_id)
+        if gid:
+            await wa.send_text(gid, f"👍 {num} is now being handled by {mname} ({role}).", reply_to=ticket.get("source_message_id"))
+    elif action == "reject":
+        await pipeline.add_timeline(tid, f"{role} Declined", f"{mname} declined the escalation")
+        await audit.log(society_id, "committee_rejected", f"{mname} ({role}) declined {num}", actor=mname, category="ticket", ticket_number=num)
+        await _ack(phone, f"No problem — you've *declined* {num}. Escalating further.")
+        fresh = await db.tickets.find_one({"_id": ticket["_id"]})
+        await pipeline.escalate_to_committee(fresh, after_priority=(ticket.get("committee_priority") or 0), reason=f"{role} declined")
+
+
 async def _handle_button(society_id: str, phone: str, button_id: str):
     logger.info("button click phone=%s id=%s", phone, button_id)
     if button_id.startswith("vendor_accept_"):
         await _vendor_action(society_id, phone, button_id.replace("vendor_accept_", ""), "accept")
     elif button_id.startswith("vendor_reject_"):
         await _vendor_action(society_id, phone, button_id.replace("vendor_reject_", ""), "reject")
+    elif button_id.startswith("committee_accept_"):
+        await _committee_action(society_id, phone, button_id.replace("committee_accept_", ""), "accept")
+    elif button_id.startswith("committee_reject_"):
+        await _committee_action(society_id, phone, button_id.replace("committee_reject_", ""), "reject")
     elif button_id.startswith("vendor_resolved_"):
         await _vendor_action(society_id, phone, button_id.replace("vendor_resolved_", ""), "resolve")
     elif button_id == "resident_confirm":
@@ -475,6 +510,24 @@ async def _handle_direct_reply(society_id: str, phone: str, text: str):
                 await _vendor_action(society_id, phone, tid, "reject"); return
             if "resolve" in t or t == "done" or "complete" in t or "finished" in t:
                 await _vendor_action(society_id, phone, tid, "resolve"); return
+    member = await db.committee.find_one({"society_id": society_id, "phone": {"$regex": phone[-10:] + "$"}})
+    if member:
+        job = await db.tickets.find_one({"committee_assignee_id": str(member["_id"]), "status": {"$in": ["Open", "Pending"]}}, sort=[("updated_at", -1)])
+        if job:
+            tid = str(job["_id"])
+            if "accept" in t:
+                await _committee_action(society_id, phone, tid, "accept"); return
+            if "reject" in t or "decline" in t:
+                await _committee_action(society_id, phone, tid, "reject"); return
+            if "resolve" in t or t == "done" or "complete" in t or "finished" in t:
+                await db.tickets.update_one({"_id": job["_id"]}, {"$set": {"status": "Resolved", "response_due_at": None, "updated_at": now_iso()}})
+                await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by {member.get('name')} ({member.get('role')})")
+                await audit.log(society_id, "ticket_resolved", f"{job.get('ticket_number')} resolved by {member.get('name')} via WhatsApp", actor=member.get("name"), category="ticket", ticket_number=job.get("ticket_number"))
+                await _ack(phone, f"✅ Marked {job.get('ticket_number')} as *resolved*. Thank you!")
+                gid = await _group_chat_id(society_id)
+                if gid:
+                    await wa.send_text(gid, f"✅ {job.get('ticket_number')} has been resolved by {member.get('name')} ({member.get('role')}). Thank you!", reply_to=job.get("source_message_id"))
+                return
     if "confirm" in t or t == "yes":
         await _handle_button(society_id, phone, "resident_confirm")
     elif "cancel" in t or t == "no":

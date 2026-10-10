@@ -559,9 +559,22 @@ async def create_committee(body: dict, society_id: str = None, user: dict = Depe
     sid = society_id or _sid(user)
     if not sid:
         raise HTTPException(status_code=400, detail="society_id required")
+    role = (body.get("role") or "Member").strip()
+    pr = body.get("priority")
+    try:
+        priority = int(pr) if pr not in (None, "", 0, "0") else None
+    except (TypeError, ValueError):
+        priority = None
+    if role == "Member":
+        priority = None
+    try:
+        acc = float(body.get("acceptance_time_hours") or 2)
+    except (TypeError, ValueError):
+        acc = 2.0
     doc = {"society_id": sid, "name": (body.get("name") or "").strip(),
-           "role": (body.get("role") or "Member").strip(), "tower": (body.get("tower") or "").strip(),
+           "role": role, "tower": (body.get("tower") or "").strip(),
            "phone": (body.get("phone") or "").strip(), "email": (body.get("email") or "").strip(),
+           "priority": priority, "acceptance_time_hours": acc,
            "created_at": now_iso()}
     if not doc["name"]:
         raise HTTPException(status_code=400, detail="Member name required")
@@ -575,6 +588,19 @@ async def update_committee(cid: str, body: dict, user: dict = Depends(require_so
     upd = {k: (body.get(k) or "").strip() for k in ("name", "role", "tower", "phone", "email") if k in body}
     if "name" in upd and not upd["name"]:
         raise HTTPException(status_code=400, detail="Member name required")
+    if "priority" in body:
+        pr = body.get("priority")
+        try:
+            upd["priority"] = int(pr) if pr not in (None, "", 0, "0") else None
+        except (TypeError, ValueError):
+            upd["priority"] = None
+    if "acceptance_time_hours" in body:
+        try:
+            upd["acceptance_time_hours"] = float(body.get("acceptance_time_hours") or 2)
+        except (TypeError, ValueError):
+            upd["acceptance_time_hours"] = 2.0
+    if upd.get("role") == "Member":
+        upd["priority"] = None
     await db.committee.update_one({"_id": ObjectId(cid)}, {"$set": upd})
     doc = await db.committee.find_one({"_id": ObjectId(cid)})
     if not doc:

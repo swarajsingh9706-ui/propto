@@ -1,5 +1,13 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
+## Feature (2026-06) — Committee escalation chain (priority + acceptance time)
+- Committee members now have **`priority`** (escalation order, nullable) and **`acceptance_time_hours`** (default 2). Shown in the Committee Add/Edit dialog for every role EXCEPT **Member**; displayed on each card. Committee page gained an **Edit** dialog (was add/delete only). Persisted by `society_router` committee POST/PUT.
+- Default/effective priority (`pipeline._eff_priority`): Society Manager = 1, Secretary = 2 (or **1 when no Society Manager exists**); other roles have no default; Member never gets one. Admin can override with an explicit number.
+- Escalation flow: when a **vendor doesn't accept** in its window (or rejects with no other vendor), the ticket escalates into the committee chain — **Society Manager first, then Secretary**, by priority. Each assignee has its own acceptance window; no accept in time → next member. Chain exhausted → "Society Manager" label needing manual action (`pipeline.escalate_to_committee`, `_committee_chain`).
+- `pipeline.check_vendor_timeouts` now handles BOTH vendor and committee-member timeouts (driven by `POST /api/cron/vendor-timeouts`). Committee members get WhatsApp Accept/Reject buttons (`committee_accept_`/`committee_reject_`) and can reply DONE to resolve (`whatsapp_router._committee_action`).
+- Verified via `tests/committee_chain_probe.py`: vendor→Manager→Secretary→exhausted, no-manager→Secretary=priority 1; plus committee API create with priority/acceptance.
+
+
 ## Feature (2026-06) — Self-service Change Password
 - Top-right **Change Password** button added to the dashboard top header (`components/DashKit.jsx` `TopHeader`) — navigates to a dedicated page (not a popup).
 - New page `pages/society/ChangePassword.jsx` at route `/change-password` (Protected): shows the logged-in user's **email (read-only, non-editable)**, **New password**, and **Confirm new password** fields.

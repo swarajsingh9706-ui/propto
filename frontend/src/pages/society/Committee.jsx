@@ -5,10 +5,10 @@ import { PageHeader } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Loader2, UsersRound, Trash2, Phone, Mail } from "lucide-react";
+import { Plus, Loader2, UsersRound, Trash2, Phone, Mail, Pencil, Clock } from "lucide-react";
 import { COUNTRY_CODES } from "@/lib/countryCodes";
 
 const ROLES = ["Chairman", "Secretary", "Treasurer", "Vice Chairman", "Joint Secretary", "Society Manager", "Member"];
@@ -18,61 +18,112 @@ const ROLE_COLOR = {
   Treasurer: ["#ecfdf5", "#059669", "#a7f3d0"],
   "Society Manager": ["#fff7ed", "#ea580c", "#fed7aa"],
 };
-const empty = { name: "", role: "Member", tower: "", dial: "91", phone: "", email: "" };
+const emptyForm = { name: "", role: "Member", tower: "", dial: "91", phone: "", email: "", priority: "", acceptance_time_hours: 2 };
 
 export default function Committee() {
   const cfg = useScope();
   const { data, loading, reload } = useFetch("/society/committee");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(empty);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const members = data || [];
+  const hasManager = members.some((m) => m.role === "Society Manager");
 
-  const create = async () => {
+  const defaultPriority = (role, withManager) => {
+    if (role === "Society Manager") return 1;
+    if (role === "Secretary") return withManager ? 2 : 1;
+    return "";
+  };
+  const effPriority = (m) => {
+    if (m.priority != null && m.priority > 0) return m.priority;
+    if (m.role === "Society Manager") return 1;
+    if (m.role === "Secretary") return hasManager ? 2 : 1;
+    return null;
+  };
+
+  const onRole = (role) =>
+    setForm((f) => ({ ...f, role, priority: role === "Member" ? "" : (f.priority === "" ? defaultPriority(role, hasManager) : f.priority) }));
+
+  const openAdd = () => { setEditingId(null); setForm(emptyForm); setOpen(true); };
+  const openEdit = (m) => {
+    let dial = "91", number = m.phone || "";
+    const match = COUNTRY_CODES.map((c) => c.dial).filter((d) => number.startsWith(d)).sort((a, b) => b.length - a.length)[0];
+    if (match) { dial = match; number = number.slice(match.length); }
+    setEditingId(m.id);
+    setForm({ name: m.name || "", role: m.role || "Member", tower: m.tower || "", dial, phone: number, email: m.email || "", priority: m.priority ?? "", acceptance_time_hours: m.acceptance_time_hours ?? 2 });
+    setOpen(true);
+  };
+
+  const save = async () => {
     setSaving(true);
+    const payload = {
+      name: form.name, role: form.role, tower: form.tower, email: form.email,
+      phone: form.phone ? form.dial + form.phone.replace(/\D/g, "") : "",
+      priority: form.role === "Member" ? null : (form.priority === "" ? null : Number(form.priority)),
+      acceptance_time_hours: Number(form.acceptance_time_hours) || 2,
+    };
     try {
-      const payload = { name: form.name, role: form.role, tower: form.tower, email: form.email, phone: form.phone ? form.dial + form.phone.replace(/\D/g, "") : "" };
-      await api.post("/society/committee", payload, cfg); toast.success("Member added"); setOpen(false); setForm(empty); reload();
-    }
-    catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
+      if (editingId) await api.put(`/society/committee/${editingId}`, payload, cfg);
+      else await api.post("/society/committee", payload, cfg);
+      toast.success(editingId ? "Member updated" : "Member added");
+      setOpen(false); setForm(emptyForm); setEditingId(null); reload();
+    } catch (e) { toast.error(apiError(e)); } finally { setSaving(false); }
   };
   const del = async (m) => { try { await api.delete(`/society/committee/${m.id}`); reload(); toast.success("Removed"); } catch (e) { toast.error(apiError(e)); } };
   const roleColor = (r) => ROLE_COLOR[r] || ["#f1f5f9", "#475569", "#e2e8f0"];
+  const showPriority = form.role !== "Member";
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="committee-page">
       <PageHeader title="Society Committee" subtitle="Managing Committee" description="Manage committee members used for escalation alerts">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button data-testid="add-committee-btn"><Plus className="mr-1.5 h-4 w-4" />Add Member</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle className="font-cabinet">New Committee Member</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><Label className="text-xs">Name</Label><Input data-testid="committee-name-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
-              <div><Label className="text-xs">Role</Label>
-                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}><SelectTrigger data-testid="committee-role-select" className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select>
-              </div>
-              <div><Label className="text-xs">Tower / Block</Label><Input data-testid="committee-tower-input" value={form.tower} onChange={(e) => setForm({ ...form, tower: e.target.value })} className="mt-1" placeholder="Tower A" /></div>
-              <div><Label className="text-xs">Phone</Label>
-                <div className="mt-1 flex gap-2">
-                  <Select value={form.dial} onValueChange={(v) => setForm({ ...form, dial: v })}>
-                    <SelectTrigger data-testid="committee-country-code" className="w-[150px] shrink-0"><SelectValue /></SelectTrigger>
-                    <SelectContent className="max-h-64">{COUNTRY_CODES.map((c) => <SelectItem key={c.dial + c.label} value={c.dial}>{c.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                  <Input data-testid="committee-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="flex-1" placeholder="9000000001" />
+        <Button data-testid="add-committee-btn" onClick={openAdd}><Plus className="mr-1.5 h-4 w-4" />Add Member</Button>
+      </PageHeader>
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setEditingId(null); setForm(emptyForm); } }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-cabinet">{editingId ? "Edit Committee Member" : "New Committee Member"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label className="text-xs">Name</Label><Input data-testid="committee-name-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
+            <div><Label className="text-xs">Role</Label>
+              <Select value={form.role} onValueChange={onRole}><SelectTrigger data-testid="committee-role-select" className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select>
+            </div>
+            {showPriority && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Escalation priority</Label>
+                  <Input type="number" min="1" data-testid="committee-priority-input" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="mt-1" placeholder="e.g. 1" />
+                  <p className="mt-1 text-[10px] text-zinc-400">Lower = contacted first. Blank keeps this role out of the chain.</p>
+                </div>
+                <div>
+                  <Label className="text-xs">Acceptance time (hours)</Label>
+                  <Input type="number" min="0" step="0.5" data-testid="committee-acceptance-input" value={form.acceptance_time_hours} onChange={(e) => setForm({ ...form, acceptance_time_hours: e.target.value })} className="mt-1" placeholder="2" />
+                  <p className="mt-1 text-[10px] text-zinc-400">If not accepted in time, it escalates to the next member. Default 2h.</p>
                 </div>
               </div>
-              <div><Label className="text-xs">Email</Label><Input data-testid="committee-email-input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" /></div>
+            )}
+            <div><Label className="text-xs">Tower / Block</Label><Input data-testid="committee-tower-input" value={form.tower} onChange={(e) => setForm({ ...form, tower: e.target.value })} className="mt-1" placeholder="Tower A" /></div>
+            <div><Label className="text-xs">Phone</Label>
+              <div className="mt-1 flex gap-2">
+                <Select value={form.dial} onValueChange={(v) => setForm({ ...form, dial: v })}>
+                  <SelectTrigger data-testid="committee-country-code" className="w-[150px] shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent className="max-h-64">{COUNTRY_CODES.map((c) => <SelectItem key={c.dial + c.label} value={c.dial}>{c.label}</SelectItem>)}</SelectContent>
+                </Select>
+                <Input data-testid="committee-phone-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="flex-1" placeholder="9000000001" />
+              </div>
             </div>
-            <DialogFooter><Button data-testid="save-committee-btn" onClick={create} disabled={saving || !form.name}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add Member</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </PageHeader>
+            <div><Label className="text-xs">Email</Label><Input data-testid="committee-email-input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" /></div>
+          </div>
+          <DialogFooter><Button data-testid="save-committee-btn" onClick={save} disabled={saving || !form.name}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingId ? "Save Changes" : "Add Member"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? <Loader2 className="h-6 w-6 animate-spin text-slate-400" /> :
         members.length === 0 ? <div className="rounded-lg border border-dashed p-12 text-center text-sm text-slate-400"><UsersRound className="mx-auto mb-3 h-8 w-8 text-slate-300" />No committee members yet.</div> : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {members.map((m) => {
               const [bg, fg, br] = roleColor(m.role);
+              const pr = effPriority(m);
               return (
                 <div key={m.id} data-testid={`committee-card-${m.id}`} className="card-hover rounded-xl border border-border bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
                   <div className="flex items-start justify-between">
@@ -83,9 +134,19 @@ export default function Committee() {
                         <span className="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: bg, color: fg, border: `1px solid ${br}` }}>{m.role}</span>
                       </div>
                     </div>
-                    <button data-testid={`delete-committee-${m.id}`} onClick={() => del(m)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                    <div className="flex items-center gap-1">
+                      <button data-testid={`edit-committee-${m.id}`} onClick={() => openEdit(m)} className="text-slate-300 hover:text-brand"><Pencil className="h-4 w-4" /></button>
+                      <button data-testid={`delete-committee-${m.id}`} onClick={() => del(m)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                    </div>
                   </div>
                   <div className="mt-4 space-y-1.5 border-t border-border pt-3 text-[12px] text-slate-500">
+                    {pr != null && (
+                      <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/10 text-[10px] font-bold text-brand">{pr}</span>
+                        Escalation priority
+                      </div>
+                    )}
+                    {pr != null && <div className="flex items-center gap-1.5"><Clock className="h-3 w-3" />Responds within {m.acceptance_time_hours ?? 2}h</div>}
                     {m.tower && <div>🏢 {m.tower}</div>}
                     {m.phone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{m.phone}</div>}
                     {m.email && <div className="flex items-center gap-1.5"><Mail className="h-3 w-3" />{m.email}</div>}
