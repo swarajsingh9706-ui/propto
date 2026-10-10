@@ -296,6 +296,10 @@ async def _committee_action(society_id: str, phone: str, tid: str, action: str):
 
 async def _handle_button(society_id: str, phone: str, button_id: str):
     logger.info("button click phone=%s id=%s", phone, button_id)
+    # Whapi prefixes interactive button ids (e.g. "ButtonsV3:vendor_accept_<tid>").
+    # Strip any "prefix:" so our startswith() matching works.
+    if ":" in button_id:
+        button_id = button_id.split(":", 1)[1]
     if button_id.startswith("vendor_accept_"):
         await _vendor_action(society_id, phone, button_id.replace("vendor_accept_", ""), "accept")
     elif button_id.startswith("vendor_reject_"):

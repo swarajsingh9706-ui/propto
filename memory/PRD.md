@@ -1,6 +1,10 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Bug fix (2026-06) — Vendor reject/accept dropped on reader webhook
+## Bug fix (2026-06) — Accept/Reject buttons did nothing (Whapi `ButtonsV3:` prefix)
+Root cause (found via live `journalctl`): Whapi sends interactive quick-reply ids prefixed with `ButtonsV3:` (e.g. `ButtonsV3:vendor_accept_<tid>`). `_handle_button` matched with `button_id.startswith("vendor_accept_")`, which failed because of the prefix, so NO branch ran — vendor/committee Accept/Reject/Resolve taps were silently ignored and ticket status never changed.
+Fix (`routers/whatsapp_router._handle_button`): strip any leading `prefix:` (`button_id.split(":",1)[1]`) before matching. Verified end-to-end by POSTing a `ButtonsV3:`-prefixed reply payload to `/api/whapi/webhook/send` → `vendor_accepted=True`.
+NOTE: on the VPS the `propto-worker` process must be restarted after deploy to load this fix (it imports `process_whapi` at startup).
+
 Root cause: `process_whapi` skipped every non-group message when `role == "read"` (`if role == "read" and not group_chat_id: continue`). Vendor/committee Accept/Reject/Done DM replies that arrived on the reader account — or text-fallback replies when Whapi interactive buttons fail — were silently dropped, so ticket status never updated and escalation never fired.
 Fix (`routers/whatsapp_router.py`): DM replies are now processed on BOTH reader and sender webhooks, de-duplicated by message id via a `wa_processed` collection (upsert `$setOnInsert`; skip if not newly inserted). Added logging in the button dispatch and `_handle_direct_reply`. Group AI pipeline still runs only on the reader; the sender's own group echoes are still ignored.
 Verified with `tests/reject_routing_probe.py`: a "Reject" DM delivered via the reader webhook clears the vendor, escalates into the committee chain, and a duplicate (same id on the sender webhook) is skipped.

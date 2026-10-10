@@ -28,7 +28,7 @@ async def main():
     # Simulate a Whapi interactive button reply (vendor taps Accept) hitting the SEND webhook
     payload = {"messages": [{
         "chat_id": vendor["phone"], "from": vendor["phone"], "id": "HTTPMSG-ACCEPT",
-        "type": "reply", "reply": {"buttons_reply": {"id": f"vendor_accept_{tid}", "title": "Accept"}},
+        "type": "reply", "reply": {"buttons_reply": {"id": f"ButtonsV3:vendor_accept_{tid}", "title": "Accept"}},
     }]}
     url = api_url() + "/api/whapi/webhook/send"
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
