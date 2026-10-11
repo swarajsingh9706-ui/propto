@@ -63,6 +63,25 @@ def strong_keyword_hit(text: str):
     return False, ""
 
 
+# Phrases that indicate an issue is already fixed/closed (so NOT a new complaint),
+# and negations that cancel that resolved sense ("still not resolved", "not fixed yet").
+RESOLVED_WORDS = [
+    "resolved", "fixed", "sorted", "solved", "rectified", "restored", "repaired",
+    "working now", "working fine", "back to normal", "all good now", "issue closed",
+    "problem closed", "no longer an issue", "sorted out", "cleared now",
+]
+NEGATION_WORDS = ["not ", "n't", "pending", "still", "yet", "nahi", "unresolved", "never", "haven't", "isn't", "aren't"]
+
+
+def is_resolved_context(text: str) -> bool:
+    """True when the message reads as an already-resolved/positive update (e.g.
+    'swimming pool issue is resolved') and not as a live complaint."""
+    t = (text or "").lower()
+    if any(w in t for w in NEGATION_WORDS):
+        return False
+    return any(w in t for w in RESOLVED_WORDS)
+
+
 def prefilter(text: str) -> dict:
     """Cheap gate BEFORE the LLM. Drops ONLY greeting messages (and empty text);
     every other message is sent to OpenAI, which makes the complaint-or-not decision."""
@@ -297,15 +316,18 @@ async def analyze_message(text: str) -> dict:
     kb = situations_kb.match(text)
     kw_hit, kw_cat = strong_keyword_hit(text)
 
-    # 3) Safety net — ONLY when the LLM failed/returned empty do we fall back to
-    #    taxonomy/keyword signals. When the LLM answered successfully we TRUST its
-    #    strict complaint-or-not verdict and never override a working "NotComplaint".
-    if ai.get("intent") != "Complaint" and not ai.get("_llm_ok") and (kb or kw_hit):
+    # 3) Safety net — if the deterministic signals say this is a genuine society issue
+    #    (domain keyword / generic indicator like "issue"/"problem", or a taxonomy match)
+    #    and the message is NOT a resolved/positive update, force a Complaint. This
+    #    overrides the LLM even when it answered successfully, because the LLM is
+    #    inconsistent on short phrasings like "water issue in my flat".
+    resolved_ctx = is_resolved_context(text)
+    if ai.get("intent") != "Complaint" and (kb or kw_hit) and not resolved_ctx:
         reason = "taxonomy_match" if kb else "keyword_match"
-        logger.info("LLM-failure fallback override (%s); llm_ok=%s", reason, ai.get("_llm_ok"))
+        logger.info("Complaint override (%s); llm_ok=%s resolved_ctx=%s", reason, ai.get("_llm_ok"), resolved_ctx)
         ai["intent"] = "Complaint"
         ai["override_reason"] = reason
-        # When OpenAI failed, ensure sane defaults for ticket creation.
+        # Ensure sane defaults for ticket creation (esp. when OpenAI failed/was empty).
         if not ai.get("description"):
             ai["description"] = text[:150]
         if kw_cat and not ai.get("category"):

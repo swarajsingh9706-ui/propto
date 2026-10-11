@@ -1,6 +1,9 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Bug fix (2026-06b) — Flatless complaints skipped dedup entirely
+## Bug fix (2026-06c) — Genuine "issue/problem" messages silently skipped
+Short complaints like "water issue in my flat" were sometimes dropped because the LLM inconsistently returned NotComplaint, and the keyword/taxonomy safety-net only overrode when the LLM call *failed*. Fix (`ai_engine`): the deterministic override now forces a Complaint whenever a domain keyword / generic indicator ("issue", "problem", "broken", …) or a taxonomy match is present — even if the LLM succeeded — UNLESS the message is a resolved/positive update. Added `is_resolved_context()` (RESOLVED_WORDS like "resolved/fixed/sorted", cancelled by NEGATION_WORDS like "not/still/yet/unresolved") so "swimming pool issue is resolved" stays a non-complaint while "water issue still not resolved" creates a ticket. Verified via `tests/issue_keyword_probe.py`.
+
+
 The previous dedup fix only helped when the AI parsed a flat. Real group complaints usually have NO flat (`Flat: —`), and `find_duplicate` returned `None` immediately when `flat` was empty, so EVERY reworded flatless message created a new ticket. Fixed `pipeline.find_duplicate`: when flat is present it scans same-flat Open/Pending tickets (category OR similarity); when flat is absent it scans the society's Open/Pending tickets from the last 48h and matches purely on wording similarity (`_looks_similar`). Verified via `tests/dedupe_probe.py` CASE3 (flatless reworded → duplicate) and CASE4 (flatless different issue → separate ticket), plus the earlier same-flat cases.
 
 
