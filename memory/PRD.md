@@ -1,6 +1,10 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Bug fix (2026-06) — Society-Manager tickets auto-"accepted" without acceptance
+## Bug fix (2026-06) — Near-identical complaints created duplicate tickets
+Root cause: `find_duplicate` required an EXACT category match. The AI/taxonomy classifies slightly reworded complaints into different categories (e.g. "No light in my flat" → Electrical vendor vs "No light in flat since yesterday" → Society Manager), so the exact-category check missed the duplicate and a second ticket was created.
+Fix (`pipeline.find_duplicate`): among same-flat Open/Pending tickets, a report is now a duplicate when the category matches OR the complaint wording is substantially similar — content-word Jaccard ≥ 0.45 (grammatical stopwords removed; nouns like flat/light kept) OR `difflib` string ratio ≥ 0.82. Compares the new description against each candidate's description + raw_message (category names excluded so category drift doesn't dilute the match).
+Verified via `tests/dedupe_probe.py`: "No electricity in the flat since yesterday" (different category) → duplicate; "No water in the flat" (same flat) → NOT duplicate; different flat → NOT duplicate. Duplicate path replies "This is already tracked under ticket <num>".
+
 Previously the manager-only / "Handled By: Society Manager" branch in `create_ticket` immediately marked the ticket handled-in-house (no acceptance step), so it looked auto-accepted. Now that branch calls `escalate_to_committee(doc, after_priority=0, announce_group=False)` — the ticket is assigned to the Society Manager committee member with Accept/Reject buttons and a `response_due_at` timer; `committee_accepted` stays False until they actually accept. If not accepted within their acceptance window, `check_vendor_timeouts` escalates to the next member (Secretary → …). Added an `announce_group` flag to `escalate_to_committee` so the initial routing doesn't double-post to the group (the creation ack already states the assignee). Requires a committee member with role "Society Manager"; if the chain is empty it falls back to the "Society Manager — pending acceptance" label.
 Verified via `tests/manager_routing_probe.py`: new manager ticket → status Pending, committee_role=Society Manager, committee_accepted=False, response_due_at set.
 

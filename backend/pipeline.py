@@ -55,15 +55,55 @@ async def find_resident(society_id: str, phone: str = None, flat: str = None):
     return None
 
 
-async def find_duplicate(society_id: str, flat: str, category: str):
+_STOPWORDS = {
+    "the", "a", "an", "in", "my", "is", "are", "was", "were", "no", "not", "there",
+    "since", "for", "of", "at", "on", "to", "and", "please", "help", "it", "this",
+    "that", "i", "we", "our", "has", "have", "had", "having", "am", "been", "be",
+    "from", "with", "still", "again", "getting", "got", "very", "really",
+}
+
+
+def _content_words(text):
+    import re
+    words = re.sub(r"[^a-z0-9 ]", " ", (text or "").lower()).split()
+    return {w for w in words if w not in _STOPWORDS and len(w) > 1}
+
+
+def _text_similarity(a, b):
+    import difflib, re
+    na = re.sub(r"[^a-z0-9 ]", " ", (a or "").lower())
+    nb = re.sub(r"[^a-z0-9 ]", " ", (b or "").lower())
+    return difflib.SequenceMatcher(None, na, nb).ratio()
+
+
+def _looks_similar(new_text, cand_text):
+    wa, wb = _content_words(new_text), _content_words(cand_text)
+    if wa and wb:
+        jaccard = len(wa & wb) / len(wa | wb)
+        if jaccard >= 0.45:
+            return True
+    return _text_similarity(new_text, cand_text) >= 0.82
+
+
+async def find_duplicate(society_id: str, flat: str, category: str, description: str = ""):
+    """A report is a duplicate of an existing Open/Pending ticket for the SAME flat when
+    the category matches OR the complaint wording is substantially similar — so small
+    wording changes (e.g. '...since yesterday') don't spawn a second ticket even if the
+    AI/taxonomy routes them to a different category."""
     if not flat:
         return None
-    return await db.tickets.find_one({
+    cands = await db.tickets.find({
         "society_id": society_id,
         "flat": {"$regex": f"^{flat}$", "$options": "i"},
-        "category": category,
         "status": {"$in": ["Open", "Pending"]},
-    })
+    }).sort("created_at", -1).to_list(50)
+    for c in cands:
+        if category and c.get("category") == category:
+            return c
+        cand_text = f"{c.get('description', '')} {c.get('raw_message', '')}".strip()
+        if _looks_similar(description, cand_text):
+            return c
+    return None
 
 
 async def pick_vendor(society_id: str, category: str, exclude_id: str = None):
@@ -409,7 +449,7 @@ async def process_message(society_id: str, phone: str, text: str, group_chat_id:
     conf = ai.get("confidence", 0)
 
     if conf >= threshold():
-        dup = await find_duplicate(society_id, ai.get("flat"), ai.get("category"))
+        dup = await find_duplicate(society_id, ai.get("flat"), ai.get("category"), ai.get("description") or text)
         if dup:
             await db.tickets.update_one(
                 {"_id": dup["_id"]},
