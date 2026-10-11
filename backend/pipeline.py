@@ -90,15 +90,18 @@ async def find_duplicate(society_id: str, flat: str, category: str, description:
     the category matches OR the complaint wording is substantially similar — so small
     wording changes (e.g. '...since yesterday') don't spawn a second ticket even if the
     AI/taxonomy routes them to a different category."""
-    if not flat:
-        return None
-    cands = await db.tickets.find({
-        "society_id": society_id,
-        "flat": {"$regex": f"^{flat}$", "$options": "i"},
-        "status": {"$in": ["Open", "Pending"]},
-    }).sort("created_at", -1).to_list(50)
+    base = {"society_id": society_id, "status": {"$in": ["Open", "Pending"]}}
+    if flat:
+        base["flat"] = {"$regex": f"^{flat}$", "$options": "i"}
+    else:
+        # No flat parsed (common for group complaints) — the exact-flat guard used to
+        # disable dedup entirely here, so every reworded message spawned a new ticket.
+        # Fall back to recent society tickets matched purely on wording similarity.
+        since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        base["created_at"] = {"$gte": since}
+    cands = await db.tickets.find(base).sort("created_at", -1).to_list(100)
     for c in cands:
-        if category and c.get("category") == category:
+        if flat and category and c.get("category") == category:
             return c
         cand_text = f"{c.get('description', '')} {c.get('raw_message', '')}".strip()
         if _looks_similar(description, cand_text):

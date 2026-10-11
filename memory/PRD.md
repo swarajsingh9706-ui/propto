@@ -1,6 +1,9 @@
 # PROPTO — Society Complaint & Ticket Management (PRD)
 
-## Bug fix (2026-06) — Near-identical complaints created duplicate tickets
+## Bug fix (2026-06b) — Flatless complaints skipped dedup entirely
+The previous dedup fix only helped when the AI parsed a flat. Real group complaints usually have NO flat (`Flat: —`), and `find_duplicate` returned `None` immediately when `flat` was empty, so EVERY reworded flatless message created a new ticket. Fixed `pipeline.find_duplicate`: when flat is present it scans same-flat Open/Pending tickets (category OR similarity); when flat is absent it scans the society's Open/Pending tickets from the last 48h and matches purely on wording similarity (`_looks_similar`). Verified via `tests/dedupe_probe.py` CASE3 (flatless reworded → duplicate) and CASE4 (flatless different issue → separate ticket), plus the earlier same-flat cases.
+
+
 Root cause: `find_duplicate` required an EXACT category match. The AI/taxonomy classifies slightly reworded complaints into different categories (e.g. "No light in my flat" → Electrical vendor vs "No light in flat since yesterday" → Society Manager), so the exact-category check missed the duplicate and a second ticket was created.
 Fix (`pipeline.find_duplicate`): among same-flat Open/Pending tickets, a report is now a duplicate when the category matches OR the complaint wording is substantially similar — content-word Jaccard ≥ 0.45 (grammatical stopwords removed; nouns like flat/light kept) OR `difflib` string ratio ≥ 0.82. Compares the new description against each candidate's description + raw_message (category names excluded so category drift doesn't dilute the match).
 Verified via `tests/dedupe_probe.py`: "No electricity in the flat since yesterday" (different category) → duplicate; "No water in the flat" (same flat) → NOT duplicate; different flat → NOT duplicate. Duplicate path replies "This is already tracked under ticket <num>".
