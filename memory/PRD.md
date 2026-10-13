@@ -429,3 +429,13 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - `tests/issue_keyword_probe.py` (25 phrases, simulated + `--live`): 0 failures locally.
 - PENDING: deploy to VPS + restart API and worker, then verify with live WhatsApp.
 
+
+## Taxonomy v3.2 (object + problem) replaces old taxonomy (2026-10-13)
+- Source: `backend/data/Propto_Issue_Taxonomy_v3_2.xlsx` → `data/taxonomy_v3.json` (rebuild: `python3 tests/build_taxonomy_v3.py`).
+- `backend/taxonomy_v3.py`: safety override → shortcut phrase → object+problem (Line Map; Subject > Equipment > Place, then category priority, then distance) → problem only → object only. Location is recorded only.
+- Tickets now store the v3 category, short label (sub_category), issue_id, severity, SLA target, propto_action and location. `routing_category` maps v3 → old 11 vendor categories (user choice). Water Supply falls back to a Plumbing vendor. "Manager Alert" lines WhatsApp the top committee member when a vendor is assigned.
+- AI still decides complaint-or-not. Safety words force a complaint. "still not resolved"/"again" follow-ups with a taxonomy signal are complaints.
+- Tickets filter matches category OR routing_category. The detail sheet shows the Issue and Location rows.
+- Tests: taxonomy sheet 171/172 (same as the sheet's own result), issue_keyword_probe 0 failures (live), testing agent iteration_10: 100%.
+- PENDING: deploy to VPS and restart API + worker. `situations_kb.py`/the old taxonomy.json are no longer used for classification.
+
