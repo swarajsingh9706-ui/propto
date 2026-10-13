@@ -186,6 +186,8 @@ export default function Tickets() {
               <div className="mt-4 space-y-4">
                 <div className="flex gap-2"><StatusBadge status={selected.status} /><PriorityBadge priority={selected.priority} /></div>
                 <Row label="Category" value={selected.category} />
+                {selected.sub_category && <Row label="Issue" value={selected.sub_category} />}
+                {selected.location && <Row label="Location" value={selected.location} />}
                 <Row label="Flat / Tower" value={`${selected.flat || "—"} ${selected.tower ? "· " + selected.tower : ""}`} />
                 <Row label="Resident" value={`${selected.resident_name} · ${selected.resident_phone || "—"}`} />
                 <Row label="Preferred Time" value={selected.preferred_time || "—"} />
@@ -206,10 +208,10 @@ export default function Tickets() {
                   <Select onValueChange={setPendingVendor} value={pendingVendor || ""}>
                     <SelectTrigger data-testid="assign-vendor-select"><SelectValue placeholder="Select vendor" /></SelectTrigger>
                     <SelectContent>
-                      {vendors.filter((v) => v.categories?.includes(selected.category)).map((v) => (
+                      {vendors.filter((v) => v.categories?.includes(selected.routing_category || selected.category)).map((v) => (
                         <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                       ))}
-                      {vendors.filter((v) => !v.categories?.includes(selected.category)).map((v) => (
+                      {vendors.filter((v) => !v.categories?.includes(selected.routing_category || selected.category)).map((v) => (
                         <SelectItem key={v.id} value={v.id}>{v.name} (other)</SelectItem>
                       ))}
                     </SelectContent>

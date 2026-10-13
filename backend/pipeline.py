@@ -216,6 +216,15 @@ async def _committee_chain(society_id: str):
     return chain
 
 
+async def _alert_manager(ticket: dict):
+    """'Ticket + Manager Alert' lines: notify the top of the committee chain on WhatsApp."""
+    chain = await _committee_chain(ticket["society_id"])
+    if chain and chain[0][1].get("phone"):
+        _fire(wa.send_text(chain[0][1]["phone"],
+                           f"🚨 {ticket.get('priority')} ticket {ticket.get('ticket_number')}: {ticket.get('description')}\n"
+                           f"Flat: {ticket.get('flat') or '—'} | Vendor: {ticket.get('vendor_name') or 'pending'}"))
+
+
 async def escalate_to_committee(ticket: dict, after_priority: int = 0, reason: str = "", announce_group: bool = True):
     """Route a ticket to the next committee member in the escalation chain (by
     priority). Returns the assigned member, or None if the chain is exhausted."""
@@ -341,6 +350,11 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
         "assigned_to": None,
         "handled_by": ai.get("handled_by") or "",
         "vendor_required": ai.get("vendor_required") or "",
+        "routing_category": ai.get("routing_category") or "",
+        "issue_id": ai.get("issue_id") or "",
+        "location": ai.get("location") or "",
+        "sla_target": ai.get("sla_target") or "",
+        "propto_action": ai.get("propto_action") or "Ticket",
         "raw_message": raw_text,
         "reporter_phone": reporter_phone or (resident.get("phone") if resident else None),
         "source_message_id": notify_reply_to,
@@ -372,11 +386,15 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
     else:
         routing_cat = ai.get("routing_category") or doc["category"]
         vendor = await pick_vendor(society_id, routing_cat)
+        if not vendor and routing_cat == "Water Supply":
+            vendor = await pick_vendor(society_id, "Plumbing")
         if vendor:
             await assign_vendor(doc, vendor)
             assigned_line = f"Assigned to: {vendor['name']}. They'll reach out shortly."
         else:
             assigned_line = "Ticket will be assigned to concern vendor or society manager."
+    if ai.get("manager_alert") and vendor:
+        await _alert_manager(doc)
     who = (resident["name"] + ", " if resident else "")
     base = os.environ.get("PUBLIC_APP_URL")
     view_line = f"\n\n📋 View ticket details: {base.rstrip('/')}/t/{doc['ticket_number']}" if base else ""

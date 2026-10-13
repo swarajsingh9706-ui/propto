@@ -86,8 +86,9 @@ def is_status_reply(text: str) -> bool:
 
 def strong_keyword_hit(text: str):
     """(True, category) only when the message has BOTH a topic word and a problem word."""
+    import taxonomy_v3
     cat = keyword_category(text)
-    if cat and has_problem_word(text):
+    if (cat and has_problem_word(text)) or taxonomy_v3.has_complaint_signal(text):
         return True, cat
     return False, cat
 
@@ -333,6 +334,10 @@ async def _ai_classify(text: str) -> dict:
     return data
 
 
+# Follow-ups that say a problem persists ("still not resolved") are real complaints.
+_UNRESOLVED_RX = re.compile(r"\b(?:still|not (?:yet )?(?:resolved|fixed|solved|repaired|done|attended)|again)\b")
+
+
 def decide_intent(text: str, ai: dict) -> tuple:
     """Final complaint decision. AI decides; keywords only rescue an unsure/failed AI
     when the message has BOTH a topic word and a problem word. Returns (is_complaint, reason)."""
@@ -349,16 +354,19 @@ def decide_intent(text: str, ai: dict) -> tuple:
         certainty = float(ai.get("certainty", 0.5))
     except (TypeError, ValueError):
         certainty = 0.5
-    if kw_hit and certainty < 0.75:
+    if kw_hit and (certainty < 0.75 or _UNRESOLVED_RX.search((text or "").lower())):
         return True, "keyword_override"
     return False, "AI: not a complaint"
 
 
 async def analyze_message(text: str) -> dict:
-    """AI decides complaint-or-not; topic keywords decide the category/vendor;
-    the taxonomy only enriches sub-category/priority when it agrees with that category."""
-    import situations_kb
+    """AI decides complaint-or-not; taxonomy v3 (object + problem) decides issue line,
+    category, severity and vendor; keywords/AI topic are the fallback when v3 finds nothing."""
+    import situations_kb, taxonomy_v3
     ai = await _ai_classify(text)
+    tx = taxonomy_v3.match(text)
+    if tx and tx["decided_by"] == "Safety override" and not is_resolved_context(text):
+        ai["intent"], ai["_llm_ok"] = "Complaint", True
     is_complaint, reason = decide_intent(text, ai)
     ai["decision_reason"] = reason
     if not is_complaint:
@@ -373,25 +381,22 @@ async def analyze_message(text: str) -> dict:
     ai["priority"] = ai.get("priority") or "Medium"
 
     ai_topic = ai.get("category") or ""
-    kb = situations_kb.match(text)
-    cat = keyword_category(text) or (situations_kb._app_cat(ai_topic, "", "") if ai_topic else "") \
-        or (kb or {}).get("app_category") or "Civil"
+    if tx:
+        ai.update({
+            "category": tx["category"], "sub_category": tx["label"], "kb_category": tx["category"],
+            "matched_situation": tx["issue_line"], "issue_id": tx["issue_id"], "priority": tx["severity"] or ai["priority"],
+            "sla_target": tx["sla"], "propto_action": tx["action"], "manager_alert": tx["manager_alert"],
+            "location": tx["location"], "decided_by": tx["decided_by"], "routing_category": tx["vendor_category"],
+            "handled_by": tx["handled_by"], "vendor_required": tx["vendor_required"], "source_of_truth": "taxonomy_v3",
+        })
+        return ai
 
+    cat = keyword_category(text) or (situations_kb._app_cat(ai_topic, "", "") if ai_topic else "") or "Civil"
     ai["category"] = cat
     ai["routing_category"] = cat
-    if kb and kb.get("app_category") == cat:
-        ai["sub_category"] = kb.get("sub_category", "")
-        ai["kb_category"] = kb["category"]
-        ai["matched_situation"] = kb.get("issue") or kb.get("subcategory")
-        ai["kb_score"] = kb.get("score")
-        ai["priority"] = kb["priority"]
-        ai["handled_by"] = kb.get("handled_by", "")
-        ai["vendor_required"] = kb.get("vendor_required", "")
-        ai["source_of_truth"] = "excel"
-    else:
-        ai["sub_category"] = ai_topic if ai_topic != cat else ""
-        vendor_role = CATEGORY_VENDOR.get(cat, "Society Manager")
-        ai["handled_by"] = vendor_role
-        ai["vendor_required"] = "" if vendor_role == "Society Manager" else vendor_role
-        ai["source_of_truth"] = "ai"
+    ai["sub_category"] = ai_topic if ai_topic != cat else ""
+    vendor_role = CATEGORY_VENDOR.get(cat, "Society Manager")
+    ai["handled_by"] = vendor_role
+    ai["vendor_required"] = "" if vendor_role == "Society Manager" else vendor_role
+    ai["source_of_truth"] = "ai"
     return ai

@@ -17,8 +17,8 @@ CASES = [
     ("thanks, the water problem is fixed now", False, ""),
     ("lift is working now", False, ""),
     ("meeting at 6pm in clubhouse", False, ""),
-    ("water issue in my flat", True, "Plumbing"),
-    ("water issue still not resolved", True, "Plumbing"),
+    ("water issue in my flat", True, "Water Supply"),
+    ("water issue still not resolved", True, "Water Supply"),
     ("no power in B-302", True, "Electrical"),
     ("electricity gone in tower A since morning", True, "Electrical"),
     ("corridor light not working on 4th floor", True, "Electrical"),
@@ -51,13 +51,15 @@ async def main(live: bool):
                 fails += 1
                 print(f"FAIL [{label}] {text!r} -> {got} ({reason})")
         if exp:
-            cat = a.keyword_category(text)
+            import taxonomy_v3
+            tx = taxonomy_v3.match(text)
+            cat = tx["vendor_category"] if tx else a.keyword_category(text)
             if cat != exp_cat:
                 fails += 1
                 print(f"FAIL [category] {text!r} -> {cat} (expected {exp_cat})")
         if live:
             res = await a.analyze_message(text)
-            ok = (res["intent"] == "Complaint") == exp and (not exp or res["category"] == exp_cat)
+            ok = (res["intent"] == "Complaint") == exp and (not exp or res.get("routing_category") == exp_cat)
             fails += 0 if ok else 1
             print(f"{'OK ' if ok else 'FAIL'} [live] {text!r:62} -> {res['intent']:13} {res.get('category','')!s:13} {res.get('decision_reason')}")
     print("FAILURES:", fails)

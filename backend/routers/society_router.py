@@ -661,7 +661,7 @@ async def list_tickets(society_id: str = None, status: str = None, category: str
     if status and status != "all":
         q["status"] = status
     if category and category != "all":
-        q["category"] = category
+        q["$and"] = [{"$or": [{"category": category}, {"routing_category": category}]}]
     if priority and priority != "all":
         q["priority"] = priority
     if search:
