@@ -11,56 +11,85 @@ GREETING_WORDS = [
     "good morning", "good evening", "good night", "gm", "gn", "hi", "hello", "hey",
     "thanks", "thank you", "welcome", "congrats", "congratulations",
 ]
-COMPLAINT_KEYWORDS = [
-    "water", "leak", "leakage", "leaking", "plumb", "tap", "pipe", "drain", "seepage", "flush",
-    "electric", "power", "current", "light", "fan", "switch", "wiring", "socket", "mcb", "short circuit",
-    "lift", "elevator", "stuck",
-    "security", "guard", "gate", "intercom", "cctv",
-    "clean", "garbage", "trash", "housekeep", "dust", "sweep",
-    "wall", "crack", "paint", "civil", "ceiling", "tile", "plaster",
-    "parking", "vehicle",
-    "garden", "plant", "tree", "lawn",
-    "generator", "dg set", "dg ",
-    "pest", "cockroach", "mosquito", "rat", "termite", "insect",
-    "broken", "not working", "repair", "fix", "issue", "problem", "complaint",
-    "blocked", "choked", "damaged", "overflow", "no water", "no power",
+# Topic keywords (regex, word-boundary matched) -> app category used for vendor routing.
+TOPIC_CATEGORIES = [
+    ("Lift", [r"lifts?", r"elevators?"]),
+    ("DG Set", [r"generators?", r"dg", r"dg set", r"diesel"]),
+    ("Electrical", [r"power", r"electric\w*", r"electricity", r"current", r"lights?", r"bulbs?",
+                    r"tube ?lights?", r"fans?", r"switch\w*", r"wiring", r"wires?", r"sockets?",
+                    r"mcb", r"short circuit", r"fuses?", r"voltage", r"spark\w*", r"geyser",
+                    r"inverter", r"meter", r"bijli", r"light ?bill", r"plug", r"shock"]),
+    ("Plumbing", [r"water", r"leak\w*", r"seepage", r"drain\w*", r"pipes?", r"pipeline", r"taps?",
+                  r"flush\w*", r"overflow\w*", r"sewage", r"toilets?", r"plumb\w*", r"choke?d?",
+                  r"basin", r"sink", r"washroom", r"bathroom", r"tank", r"pani", r"motor", r"pump"]),
+    ("Security", [r"security", r"guards?", r"gates?", r"intercom", r"cctv", r"camera", r"theft",
+                  r"stolen", r"thief", r"watchman", r"stranger"]),
+    ("Housekeeping", [r"clean\w*", r"garbage", r"trash", r"dust\w*", r"sweep\w*", r"housekeep\w*",
+                      r"dirty", r"waste", r"kachra", r"smell\w*", r"stink\w*", r"mopping"]),
+    ("Pest Control", [r"pests?", r"cockroach\w*", r"mosquito\w*", r"rats?", r"termites?", r"insects?",
+                      r"rodents?", r"bed ?bugs?", r"lizards?", r"snakes?"]),
+    ("Gardening", [r"garden\w*", r"plants?", r"trees?", r"lawn", r"grass"]),
+    ("Parking", [r"parking", r"parked", r"vehicles?", r"car", r"bike"]),
+    ("Civil", [r"walls?", r"cracks?", r"paint\w*", r"ceiling", r"tiles?", r"plaster\w*", r"civil",
+               r"doors?", r"windows?", r"railing", r"stairs?", r"staircase", r"roof", r"terrace"]),
 ]
+_TOPIC_RX = [(cat, re.compile(r"\b(?:" + "|".join(ws) + r")\b")) for cat, ws in TOPIC_CATEGORIES]
+
+# Problem indicators — a topic word alone ("electrician is coming") is NOT a complaint.
+_PROBLEM_RX = re.compile(r"\b(?:" + "|".join([
+    r"issues?", r"problems?", r"complain\w*", r"not working", r"isn'?t working", r"doesn'?t work\w*",
+    r"not work\w*", r"stopped", r"broken", r"broke", r"leak\w*", r"damage\w*", r"stuck", r"faulty",
+    r"fault", r"no (?:water|power|electricity|lights?|current|supply|gas|lift|bijli|pani)",
+    r"not coming", r"not available", r"not (?:collected|cleaned|picked|done|repaired|fixed|attended|resolved)", r"cut", r"outage", r"tripp\w*", r"kharab", r"band hai",
+    r"nahi aa\w*", r"nahi hai", r"choke?d", r"block\w*", r"overflow\w*", r"smell\w*", r"stink\w*",
+    r"dirty", r"repair\w*", r"fix", r"blown", r"spark\w*", r"short circuit", r"low pressure",
+    r"drip\w*", r"seep\w*", r"crack\w*", r"flicker\w*", r"dead", r"burnt", r"burning", r"fell",
+    r"falling", r"missing", r"stolen", r"theft", r"infest\w*", r"malfunction\w*", r"fail\w*",
+    r"went off", r"gone", r"down", r"jammed", r"noisy", r"shock", r"fluctuat\w*", r"contaminat\w*",
+    r"muddy", r"dirty water", r"please check", r"pls check", r"urgent\w*", r"help",
+]) + r")\b")
+
+# Status / acknowledgement replies (staff or residents chatting), never new complaints.
+_STATUS_RX = re.compile(r"\b(?:" + "|".join([
+    r"w(?:or|ro)king on it", r"on it", r"on my way", r"on the way", r"will (?:check|fix|do|look|send|update|come|see|inform|call)",
+    r"looking into", r"checking", r"coming", r"reached", r"done", r"noted", r"ok(?:ay)?", r"sure",
+    r"in progress", r"wip", r"rn", r"right now", r"thanks?", r"thank you", r"got it", r"received",
+]) + r")\b")
+
+# Default vendor role per app category (used when the taxonomy does not agree with keywords).
+CATEGORY_VENDOR = {
+    "Electrical": "Electrician", "Plumbing": "Plumber", "Lift": "Lift Technician",
+    "DG Set": "DG Technician", "Security": "Security Agency", "Housekeeping": "Housekeeping Vendor",
+    "Pest Control": "Pest Control Vendor", "Gardening": "Landscape Vendor", "Parking": "Society Manager",
+    "Civil": "Civil Vendor", "Water Supply": "Plumber",
+}
 
 
-# Keyword -> app category groups. Used for the deterministic safety net so genuine
-# complaints are never dropped when OpenAI fails or misclassifies (e.g. Hinglish).
-KEYWORD_CATEGORIES = [
-    ("Lift", ["lift", "elevator"]),
-    ("Plumbing", ["water", "leak", "leakage", "leaking", "seepage", "drain", "pipe", "tap",
-                  "flush", "overflow", "sewage", "toilet", "no water", "plumb", "choked", "blocked"]),
-    ("Electrical", ["power", "electric", "current", "light", "fan", "switch", "wiring",
-                    "socket", "mcb", "short circuit", "no power", "fuse"]),
-    ("Security", ["security", "guard", "gate", "intercom", "cctv", "theft"]),
-    ("Housekeeping", ["clean", "garbage", "trash", "dust", "sweep", "housekeep"]),
-    ("Pest Control", ["pest", "cockroach", "mosquito", "rat", "termite", "insect"]),
-    ("Gardening", ["garden", "plant", "tree", "lawn"]),
-    ("Parking", ["parking", "vehicle"]),
-    ("DG Set", ["generator", "dg set", "dg "]),
-    ("Civil", ["wall", "crack", "paint", "ceiling", "tile", "plaster", "civil"]),
-]
+def keyword_category(text: str) -> str:
+    """Best app category from topic keywords (most hits wins, list order breaks ties)."""
+    t = (text or "").lower()
+    best, best_n = "", 0
+    for cat, rx in _TOPIC_RX:
+        n = len(rx.findall(t))
+        if n > best_n:
+            best, best_n = cat, n
+    return best
 
-# Generic complaint indicators that, on their own, still mean "this is a complaint".
-GENERIC_COMPLAINT_WORDS = ["broken", "not working", "repair", "fix ", "issue", "problem",
-                           "complaint", "damaged", "stuck", "down hai", "kharab", "band hai"]
+
+def has_problem_word(text: str) -> bool:
+    return bool(_PROBLEM_RX.search((text or "").lower()))
+
+
+def is_status_reply(text: str) -> bool:
+    return bool(_STATUS_RX.search((text or "").lower())) and not has_problem_word(text)
 
 
 def strong_keyword_hit(text: str):
-    """Deterministic complaint signal. Returns (True, category) if the message contains a
-    domain keyword or a generic complaint indicator; else (False, '')."""
-    t = (text or "").lower()
-    for cat, words in KEYWORD_CATEGORIES:
-        for w in words:
-            if w in t:
-                return True, cat
-    for w in GENERIC_COMPLAINT_WORDS:
-        if w in t:
-            return True, ""
-    return False, ""
+    """(True, category) only when the message has BOTH a topic word and a problem word."""
+    cat = keyword_category(text)
+    if cat and has_problem_word(text):
+        return True, cat
+    return False, cat
 
 
 # Phrases that indicate an issue is already fixed/closed (so NOT a new complaint),
@@ -182,7 +211,10 @@ Mark "intent":"NotComplaint" for everything else. Be STRICT — the following ar
 - buy/sell/rent ads, promotions, service offers
 - acknowledgements/replies like "ok", "done", "noted", "thanks", "sure"
 - vague or generic statements that do not name a specific problem (e.g. "society is nice", "good work team")
-If the message only mentions a topic without a clear, specific problem, choose NotComplaint. If unsure, choose NotComplaint with low confidence.
+- STATUS UPDATES / REPLIES from staff, vendors or residents about work in progress: "working on it rn", "on my way", "will check", "electrician is coming", "done", "plumber reached", "checking now"
+- updates that a problem is already resolved/fixed: "lift is working now", "pool issue is resolved"
+Examples that ARE complaints: "water issue in my flat", "no power in B-302", "lift stuck at 5th floor", "light not working in corridor", "tap leaking in kitchen", "garbage not collected since 2 days".
+If the message only mentions a topic without a clear, specific problem, choose NotComplaint. If unsure, choose NotComplaint with low certainty.
 
 Respond ONLY with a strict minified JSON object, no markdown, no explanation, with keys:
 "intent": "Complaint" or "NotComplaint",
@@ -192,7 +224,8 @@ Respond ONLY with a strict minified JSON object, no markdown, no explanation, wi
 "priority": "High", "Medium" or "Low",
 "preferred_time": any preferred visit time mentioned or "",
 "description": a concise one-line description of the complaint,
-"confidence": a float 0 to 1 for how sure you are this is a REAL, specific complaint. Use >=0.8 only when it clearly reports a concrete problem; use <0.5 when it is chit-chat/ambiguous.
+"confidence": a float 0 to 1 for how sure you are this is a REAL, specific complaint. Use >=0.8 only when it clearly reports a concrete problem; use <0.5 when it is chit-chat/ambiguous,
+"certainty": a float 0 to 1 for how sure you are of your intent decision (either way).
 High priority = safety/urgent (no water, no power, lift stuck/entrapment, fire/smoke/gas leak, security/theft, medical). Medium = normal repairs. Low = minor/cosmetic."""
 
 
@@ -300,61 +333,65 @@ async def _ai_classify(text: str) -> dict:
     return data
 
 
+def decide_intent(text: str, ai: dict) -> tuple:
+    """Final complaint decision. AI decides; keywords only rescue an unsure/failed AI
+    when the message has BOTH a topic word and a problem word. Returns (is_complaint, reason)."""
+    if is_resolved_context(text):
+        return False, "resolved update"
+    if is_status_reply(text):
+        return False, "status reply"
+    kw_hit, _ = strong_keyword_hit(text)
+    if not ai.get("_llm_ok"):
+        return (True, "keyword_fallback") if kw_hit else (False, "AI unavailable, no complaint keywords")
+    if ai.get("intent") == "Complaint":
+        return True, "ai"
+    try:
+        certainty = float(ai.get("certainty", 0.5))
+    except (TypeError, ValueError):
+        certainty = 0.5
+    if kw_hit and certainty < 0.75:
+        return True, "keyword_override"
+    return False, "AI: not a complaint"
+
+
 async def analyze_message(text: str) -> dict:
-    """Flow: OpenAI decides complaint-or-not (+ extracts flat/priority/description),
-    THEN the 10,000-row taxonomy enriches category/severity/routing if present,
-    ELSE the OpenAI-generated content is used to build the ticket.
-
-    Safety net: if OpenAI says NotComplaint OR the OpenAI call failed/returned empty,
-    but the message strongly matches the 10,000-row taxonomy or a complaint keyword,
-    we override to a valid Complaint so genuine issues are never silently dropped."""
-    # 1) OpenAI: is this an actual complaint? (also extracts flat/tower/priority/description)
-    ai = await _ai_classify(text)
-
-    # 2) Deterministic signals (independent of OpenAI).
+    """AI decides complaint-or-not; topic keywords decide the category/vendor;
+    the taxonomy only enriches sub-category/priority when it agrees with that category."""
     import situations_kb
-    kb = situations_kb.match(text)
-    kw_hit, kw_cat = strong_keyword_hit(text)
-
-    # 3) Safety net — if the deterministic signals say this is a genuine society issue
-    #    (domain keyword / generic indicator like "issue"/"problem", or a taxonomy match)
-    #    and the message is NOT a resolved/positive update, force a Complaint. This
-    #    overrides the LLM even when it answered successfully, because the LLM is
-    #    inconsistent on short phrasings like "water issue in my flat".
-    resolved_ctx = is_resolved_context(text)
-    if ai.get("intent") != "Complaint" and (kb or kw_hit) and not resolved_ctx:
-        reason = "taxonomy_match" if kb else "keyword_match"
-        logger.info("Complaint override (%s); llm_ok=%s resolved_ctx=%s", reason, ai.get("_llm_ok"), resolved_ctx)
-        ai["intent"] = "Complaint"
-        ai["override_reason"] = reason
-        # Ensure sane defaults for ticket creation (esp. when OpenAI failed/was empty).
-        if not ai.get("description"):
-            ai["description"] = text[:150]
-        if kw_cat and not ai.get("category"):
-            ai["category"] = kw_cat
-        ai["priority"] = ai.get("priority") or "Medium"
-        # Bump confidence past the ticket threshold so a ticket is actually created.
-        ai["confidence"] = max(float(ai.get("confidence", 0) or 0), 0.85)
-
-    if ai.get("intent") != "Complaint":
+    ai = await _ai_classify(text)
+    is_complaint, reason = decide_intent(text, ai)
+    ai["decision_reason"] = reason
+    if not is_complaint:
+        ai["intent"] = "NotComplaint"
         return ai
 
-    # 4) Complaint -> enrich from the 10,000-issue taxonomy for authoritative routing.
-    if kb:
-        ai["category"] = kb["category"]
+    ai["intent"] = "Complaint"
+    if reason in ("keyword_fallback", "keyword_override"):
+        ai["override_reason"] = reason
+        ai["confidence"] = max(float(ai.get("confidence", 0) or 0), 0.85)
+    ai["description"] = ai.get("description") or text[:150]
+    ai["priority"] = ai.get("priority") or "Medium"
+
+    ai_topic = ai.get("category") or ""
+    kb = situations_kb.match(text)
+    cat = keyword_category(text) or (situations_kb._app_cat(ai_topic, "", "") if ai_topic else "") \
+        or (kb or {}).get("app_category") or "Civil"
+
+    ai["category"] = cat
+    ai["routing_category"] = cat
+    if kb and kb.get("app_category") == cat:
         ai["sub_category"] = kb.get("sub_category", "")
-        ai["priority"] = kb["priority"]
-        ai["routing_category"] = kb.get("app_category", "")
         ai["kb_category"] = kb["category"]
         ai["matched_situation"] = kb.get("issue") or kb.get("subcategory")
         ai["kb_score"] = kb.get("score")
+        ai["priority"] = kb["priority"]
         ai["handled_by"] = kb.get("handled_by", "")
         ai["vendor_required"] = kb.get("vendor_required", "")
-        ai["confidence"] = max(float(ai.get("confidence", 0) or 0), 0.9)
         ai["source_of_truth"] = "excel"
     else:
-        # 5) No taxonomy match -> rely on the OpenAI-generated (or keyword-derived) content.
-        if kw_cat:
-            ai["routing_category"] = ai.get("routing_category") or kw_cat
+        ai["sub_category"] = ai_topic if ai_topic != cat else ""
+        vendor_role = CATEGORY_VENDOR.get(cat, "Society Manager")
+        ai["handled_by"] = vendor_role
+        ai["vendor_required"] = "" if vendor_role == "Society Manager" else vendor_role
         ai["source_of_truth"] = "ai"
     return ai

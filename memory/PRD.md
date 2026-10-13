@@ -420,3 +420,12 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Reports: "Share to WhatsApp" -> POST /api/society/reports/share-pdf {sections,start,end}. reportlab builds a branded (PROPTO blue) PDF of selected sections (summary/daily/categories/resolution/vendors) respecting date range; sent to society group via wa.send_document (sender token). Verified PDF build; group send works with live Whapi on VPS (simulated in preview). reportlab==5.0.1 added to requirements.txt.
 - UI: darkened --secondary token (210 40% 96% -> 210 24% 90%) so tab hovers / faint grey surfaces are more visible.
 - NOTE: redeploy required; group PDF delivery needs valid Whapi sender token.
+
+## Complaint detection + keyword category routing (2026-10-13)
+- Fixed over-ticketing: removed the taxonomy/keyword override that forced tickets for "working on it rn"-style messages.
+- `ai_engine.decide_intent`: AI decides. Resolved updates and status replies are always ignored. Keywords only rescue a ticket when the AI fails or is unsure (certainty < 0.75), and then only if the message has BOTH a topic word and a problem word.
+- Category/vendor: word-boundary topic keywords decide the app category (power/electricity/light/fan → Electrical, water/leak/tap → Plumbing, etc.). The taxonomy only enriches sub-category/priority/handled_by when its app_category agrees with that category; otherwise CATEGORY_VENDOR sets the vendor role.
+- Prompt now includes status-reply and complaint examples, and returns `certainty`.
+- `tests/issue_keyword_probe.py` (25 phrases, simulated + `--live`): 0 failures locally.
+- PENDING: deploy to VPS + restart API and worker, then verify with live WhatsApp.
+
