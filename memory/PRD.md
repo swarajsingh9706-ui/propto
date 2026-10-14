@@ -439,3 +439,9 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Tests: taxonomy sheet 171/172 (same as the sheet's own result), issue_keyword_probe 0 failures (live), testing agent iteration_10: 100%.
 - PENDING: deploy to VPS and restart API + worker. `situations_kb.py`/the old taxonomy.json are no longer used for classification.
 
+## Duplicate detection scoped to same flat / same reporter (2026-10-13)
+- `pipeline.find_duplicate(..., phone)`: a duplicate needs an Open/Pending ticket (last 7 days) from the SAME flat (AI flat, else resident flat) or the SAME reporter (reporter_phone / linked_reporters), plus the same category or similar wording.
+- Same or similar complaints from a different flat or resident now always create a new ticket. Same flat with a different resident is linked (user choice).
+- `tests/dedupe_probe.py`: 7 cases, 0 failures. PENDING: deploy `pipeline.py` and restart API + worker.
+
+

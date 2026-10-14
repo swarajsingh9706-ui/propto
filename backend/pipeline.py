@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import asyncio
 import logging
@@ -85,23 +86,23 @@ def _looks_similar(new_text, cand_text):
     return _text_similarity(new_text, cand_text) >= 0.82
 
 
-async def find_duplicate(society_id: str, flat: str, category: str, description: str = ""):
-    """A report is a duplicate of an existing Open/Pending ticket for the SAME flat when
-    the category matches OR the complaint wording is substantially similar — so small
-    wording changes (e.g. '...since yesterday') don't spawn a second ticket even if the
-    AI/taxonomy routes them to a different category."""
-    base = {"society_id": society_id, "status": {"$in": ["Open", "Pending"]}}
+async def find_duplicate(society_id: str, flat: str, category: str, description: str = "", phone: str = None):
+    """Duplicate = an Open/Pending ticket from the SAME flat or the SAME reporter (phone,
+    incl. linked reporters) for the same issue (same category or similar wording).
+    Similar complaints from a different flat/resident always get their own ticket."""
+    who = []
     if flat:
-        base["flat"] = {"$regex": f"^{flat}$", "$options": "i"}
-    else:
-        # No flat parsed (common for group complaints) — the exact-flat guard used to
-        # disable dedup entirely here, so every reworded message spawned a new ticket.
-        # Fall back to recent society tickets matched purely on wording similarity.
-        since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
-        base["created_at"] = {"$gte": since}
+        who.append({"flat": {"$regex": f"^{re.escape(flat)}$", "$options": "i"}})
+    if phone:
+        who += [{"reporter_phone": phone}, {"linked_reporters": phone}]
+    if not who:
+        return None
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    base = {"society_id": society_id, "status": {"$in": ["Open", "Pending"]},
+            "created_at": {"$gte": since}, "$or": who}
     cands = await db.tickets.find(base).sort("created_at", -1).to_list(100)
     for c in cands:
-        if flat and category and c.get("category") == category:
+        if category and c.get("category") == category:
             return c
         cand_text = f"{c.get('description', '')} {c.get('raw_message', '')}".strip()
         if _looks_similar(description, cand_text):
@@ -470,7 +471,8 @@ async def process_message(society_id: str, phone: str, text: str, group_chat_id:
     conf = ai.get("confidence", 0)
 
     if conf >= threshold():
-        dup = await find_duplicate(society_id, ai.get("flat"), ai.get("category"), ai.get("description") or text)
+        dup_flat = ai.get("flat") or (resident.get("flat") if resident else "")
+        dup = await find_duplicate(society_id, dup_flat, ai.get("category"), ai.get("description") or text, phone=phone)
         if dup:
             await db.tickets.update_one(
                 {"_id": dup["_id"]},
