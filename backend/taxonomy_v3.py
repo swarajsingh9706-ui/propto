@@ -9,7 +9,7 @@ _IN_HOUSE = ("society", "treasurer", "committee", "facility manager", "admin")
 # New v3 category -> one of the existing 11 vendor categories (vendors keep old tags).
 VENDOR_CATEGORY = {
     "Medical & Emergency": "Security", "Fire Safety": "Security", "Gas Supply": "Plumbing",
-    "Lift": "Lift", "Swimming Pool": "Plumbing", "DG, Inverter & Solar": "DG Set",
+    "Lift": "Lift", "Swimming Pool": "Pool AMC Vendor", "DG, Inverter & Solar": "DG Set",
     "AC & Ventilation": "Electrical", "Electrical": "Electrical", "Water Supply": "Water Supply",
     "Plumbing & Leakage": "Plumbing", "Drainage & Sewage": "Plumbing", "Seepage & Waterproofing": "Civil",
     "Civil & Structural": "Civil", "Renovation & Construction": "Civil", "Pest Control": "Pest Control",

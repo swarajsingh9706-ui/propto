@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { toast } from "sonner";
 import { Search, Loader2, Bot, CheckCircle2, UserPlus, Clock, Flame, AlertTriangle } from "lucide-react";
 
-const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control"];
+const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control", "Pool AMC Vendor"];
 
 const fmtDT = (s) => {
   if (!s) return "—";

@@ -18,5 +18,5 @@ db = client[os.environ['DB_NAME']]
 
 COMPLAINT_CATEGORIES = [
     "Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil",
-    "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control",
+    "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control", "Pool AMC Vendor",
 ]

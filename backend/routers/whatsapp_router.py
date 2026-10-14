@@ -154,7 +154,7 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
         await audit.log(society_id, "vendor_rejected", f"{vname} declined {num} via WhatsApp", actor=vname, category="vendor", ticket_number=num)
         await _ack(phone, f"No problem — you've *declined* {num}. We'll reassign it.")
         fresh = await db.tickets.find_one({"_id": ticket["_id"]})
-        newv = await pipeline.pick_vendor(society_id, cat, exclude_id=str(ticket.get("vendor_id")) if ticket.get("vendor_id") else None)
+        newv = await pipeline.pick_vendor(society_id, ticket.get("routing_category") or cat, exclude_id=str(ticket.get("vendor_id")) if ticket.get("vendor_id") else None)
         gid = await _group_chat_id(society_id)
         quote = ticket.get("source_message_id")
         if newv:

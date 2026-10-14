@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { Search, Loader2, Bot, CheckCircle2, UserPlus, Clock, Flame } from "lucide-react";
 
-const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control"];
+const CATEGORIES = ["Plumbing", "Electrical", "Lift", "Security", "Housekeeping", "Civil", "Parking", "Gardening", "Water Supply", "DG Set", "Pest Control", "Pool AMC Vendor"];
 const STATUSES = ["all", "Open", "Pending", "Resolved", "Escalated", "Closed"];
 
 const fmtDT = (s) => {

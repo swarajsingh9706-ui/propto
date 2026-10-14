@@ -393,7 +393,9 @@ async def create_ticket(society_id: str, ai: dict, resident: dict, source: str, 
             await assign_vendor(doc, vendor)
             assigned_line = f"Assigned to: {vendor['name']}. They'll reach out shortly."
         else:
-            assigned_line = "Ticket will be assigned to concern vendor or society manager."
+            member = await escalate_to_committee(doc, after_priority=0, reason=f"No {routing_cat} vendor added", announce_group=False)
+            assigned_line = (f"Assigned to: {member.get('name')} ({member.get('role')}) — awaiting their acceptance."
+                             if member else "Assigned to: Society Manager — pending acceptance.")
     if ai.get("manager_alert") and vendor:
         await _alert_manager(doc)
     who = (resident["name"] + ", " if resident else "")

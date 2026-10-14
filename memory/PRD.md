@@ -444,4 +444,11 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Same or similar complaints from a different flat or resident now always create a new ticket. Same flat with a different resident is linked (user choice).
 - `tests/dedupe_probe.py`: 7 cases, 0 failures. PENDING: deploy `pipeline.py` and restart API + worker.
 
+## Pool AMC Vendor routing + no-vendor fallback (2026-10-13)
+- Swimming Pool (taxonomy v3) and pool keywords now route to the "Pool AMC Vendor" vendor category (already in the Vendors form; added to db.COMPLAINT_CATEGORIES and the Tickets/Escalated/ReviewQueue filters).
+- Any category with no matching vendor now goes to the committee escalation chain (Society Manager first if it has top priority), instead of waiting unassigned.
+- Vendor rejection reassignment now uses the ticket's routing_category.
+- `tests/pool_routing_probe.py`: 0 failures. PENDING: deploy + restart API/worker.
+
+
 

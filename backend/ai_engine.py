@@ -28,6 +28,7 @@ TOPIC_CATEGORIES = [
                       r"dirty", r"waste", r"kachra", r"smell\w*", r"stink\w*", r"mopping"]),
     ("Pest Control", [r"pests?", r"cockroach\w*", r"mosquito\w*", r"rats?", r"termites?", r"insects?",
                       r"rodents?", r"bed ?bugs?", r"lizards?", r"snakes?"]),
+    ("Pool AMC Vendor", [r"swimming pool", r"pool", r"pool water", r"pool filter", r"pool pump"]),
     ("Gardening", [r"garden\w*", r"plants?", r"trees?", r"lawn", r"grass"]),
     ("Parking", [r"parking", r"parked", r"vehicles?", r"car", r"bike"]),
     ("Civil", [r"walls?", r"cracks?", r"paint\w*", r"ceiling", r"tiles?", r"plaster\w*", r"civil",
@@ -61,7 +62,7 @@ CATEGORY_VENDOR = {
     "Electrical": "Electrician", "Plumbing": "Plumber", "Lift": "Lift Technician",
     "DG Set": "DG Technician", "Security": "Security Agency", "Housekeeping": "Housekeeping Vendor",
     "Pest Control": "Pest Control Vendor", "Gardening": "Landscape Vendor", "Parking": "Society Manager",
-    "Civil": "Civil Vendor", "Water Supply": "Plumber",
+    "Civil": "Civil Vendor", "Water Supply": "Plumber", "Swimming Pool": "Pool AMC Vendor", "Pool AMC Vendor": "Pool AMC Vendor",
 }
 
 
