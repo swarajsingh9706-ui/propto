@@ -14,6 +14,7 @@ const SUPER_NAV = [
   { to: "/super/societies", label: "Societies", icon: Building2, color: "#059669" },
   { to: "/super/whatsapp", label: "WhatsApp", icon: MessageSquare, color: "#16a34a" },
   { to: "/super/reports", label: "Analytics", icon: BarChart3, color: "#7c3aed" },
+  { to: "/super/ai-activity", label: "AI Activity", icon: Bot, color: "#0d9488" },
 ];
 const SOCIETY_NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "#2563eb" },
@@ -25,7 +26,6 @@ const SOCIETY_NAV = [
   { to: "/committee", label: "Society Committee", icon: Building2, color: "#4f46e5" },
   { to: "/residents", label: "Residents", icon: Users, color: "#db2777" },
   { to: "/vendors", label: "Vendors", icon: HardHat, color: "#ea580c" },
-  { to: "/ai-activity", label: "AI Activity", icon: Bot, color: "#0d9488" },
   { to: "/notifications", label: "Notifications", icon: Bell, color: "#ca8a04" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, color: "#9333ea" },
 ];

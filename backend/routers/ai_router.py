@@ -18,29 +18,6 @@ def _sid(user):
     return user_society_id(user) if user["role"] == "society_admin" else user.get("society_id")
 
 
-@router.get("/activity")
-async def activity(society_id: str = None, start: str = None, end: str = None,
-                   user: dict = Depends(require_society_admin)):
-    sid = society_id or _sid(user)
-    q = {"society_id": sid}
-    if start or end:
-        rng = {}
-        if start:
-            rng["$gte"] = f"{start}T00:00:00"
-        if end:
-            rng["$lte"] = f"{end}T23:59:59.999999"
-        q["created_at"] = rng
-    logs = [_clean(a) for a in await db.ai_activity.find(q).sort("created_at", -1).limit(200).to_list(200)]
-    stats = {
-        "detected": await db.ai_activity.count_documents({**q, "decision": "ticket_created"}),
-        "ignored": await db.ai_activity.count_documents({**q, "decision": "ignored"}),
-        "review": await db.ai_activity.count_documents({**q, "decision": "review_queue"}),
-        "duplicate": await db.ai_activity.count_documents({**q, "decision": "duplicate"}),
-        "total": await db.ai_activity.count_documents(q),
-    }
-    return {"logs": logs, "stats": stats}
-
-
 @router.get("/review-queue")
 async def review_queue(society_id: str = None, user: dict = Depends(require_society_admin)):
     sid = society_id or _sid(user)

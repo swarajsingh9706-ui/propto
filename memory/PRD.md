@@ -451,4 +451,10 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - `tests/pool_routing_probe.py`: 0 failures. PENDING: deploy + restart API/worker.
 
 
+## AI Activity moved to Super Admin (2026-10-13)
+- Removed AI Activity from the society sidebar/routes (deleted `pages/society/AIActivity.jsx` and `GET /api/society/ai/activity`).
+- Added `GET /api/super/ai-activity?society_id=all|<id>&start&end` (super admin only, society_name per log) and `pages/super/SuperAIActivity.jsx` at `/super/ai-activity` with a society filter, stats and the date range.
+- Verified: super sees 150 logs with society tags and the filter works; society admin gets 403 and has no sidebar link; mobile layout OK. Test-generated ai_activity entries cleaned up.
+
+
 

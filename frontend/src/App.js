@@ -15,7 +15,7 @@ import Dashboard from "@/pages/society/Dashboard";
 import Tickets from "@/pages/society/Tickets";
 import Vendors from "@/pages/society/Vendors";
 import Residents from "@/pages/society/Residents";
-import AIActivity from "@/pages/society/AIActivity";
+import SuperAIActivity from "@/pages/super/SuperAIActivity";
 import Notifications from "@/pages/society/Notifications";
 import Assets from "@/pages/society/Assets";
 import Escalated from "@/pages/society/Escalated";
@@ -67,7 +67,7 @@ function App() {
             <Route path="/tickets" element={<Protected><Tickets /></Protected>} />
             <Route path="/vendors" element={<Protected><Vendors /></Protected>} />
             <Route path="/residents" element={<Protected><Residents /></Protected>} />
-            <Route path="/ai-activity" element={<Protected><AIActivity /></Protected>} />
+            <Route path="/super/ai-activity" element={<Protected><SuperAIActivity /></Protected>} />
             <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
             <Route path="/assets" element={<Protected><Assets /></Protected>} />
             <Route path="/escalated" element={<Protected><Escalated /></Protected>} />

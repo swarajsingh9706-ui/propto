@@ -28,6 +28,30 @@ async def list_societies(user: dict = Depends(require_super_admin)):
     return out
 
 
+@router.get("/ai-activity")
+async def ai_activity(society_id: str = None, start: str = None, end: str = None,
+                      user: dict = Depends(require_super_admin)):
+    q = {"society_id": society_id} if society_id and society_id != "all" else {}
+    if start or end:
+        rng = {}
+        if start:
+            rng["$gte"] = f"{start}T00:00:00"
+        if end:
+            rng["$lte"] = f"{end}T23:59:59.999999"
+        q["created_at"] = rng
+    names = {str(s["_id"]): s.get("name") for s in await db.societies.find({}, {"name": 1}).to_list(1000)}
+    logs = []
+    for a in await db.ai_activity.find(q).sort("created_at", -1).limit(300).to_list(300):
+        a = _clean(a)
+        a["society_name"] = names.get(a.get("society_id"), "—")
+        logs.append(a)
+    stats = {k: await db.ai_activity.count_documents({**q, "decision": d}) for k, d in
+             (("detected", "ticket_created"), ("ignored", "ignored"), ("review", "review_queue"), ("duplicate", "duplicate"))}
+    stats["total"] = await db.ai_activity.count_documents(q)
+    return {"logs": logs, "stats": stats}
+
+
+
 @router.post("/societies")
 async def create_society(body: SocietyCreate, user: dict = Depends(require_super_admin)):
     if await db.societies.find_one({"code": body.code.upper()}):
