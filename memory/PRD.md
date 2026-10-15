@@ -457,4 +457,10 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Verified: super sees 150 logs with society tags and the filter works; society admin gets 403 and has no sidebar link; mobile layout OK. Test-generated ai_activity entries cleaned up.
 
 
+## Committee "Part of escalation matrix" toggle (2026-10-15)
+- `committee.in_escalation` (default true; existing members are treated as true). When it's false, `_eff_priority` returns None, so the member is excluded from the chain, auto-routing, escalations and manager alerts. `asset_alerts._manager_phone` also skips them.
+- Committee form: a Switch for all roles. Priority/acceptance fields are hidden when it's off. Cards show an "In escalation"/"Not in escalation" badge.
+- Verified: API create/update persists the flag, the chain excludes/includes the member accordingly (test member deleted), and the UI toggle hides the priority fields.
+
+
 

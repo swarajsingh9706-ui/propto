@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus, Loader2, UsersRound, Trash2, Phone, Mail, Pencil, Clock } from "lucide-react";
 import { COUNTRY_CODES } from "@/lib/countryCodes";
+import { Switch } from "@/components/ui/switch";
 
 const ROLES = ["Chairman", "Secretary", "Treasurer", "Vice Chairman", "Joint Secretary", "Society Manager", "Member"];
 const ROLE_COLOR = {
@@ -18,7 +19,7 @@ const ROLE_COLOR = {
   Treasurer: ["#ecfdf5", "#059669", "#a7f3d0"],
   "Society Manager": ["#fff7ed", "#ea580c", "#fed7aa"],
 };
-const emptyForm = { name: "", role: "Member", tower: "", dial: "91", phone: "", email: "", priority: "", acceptance_time_hours: 2 };
+const emptyForm = { name: "", role: "Member", tower: "", dial: "91", phone: "", email: "", priority: "", acceptance_time_hours: 2, in_escalation: true };
 
 export default function Committee() {
   const cfg = useScope();
@@ -36,6 +37,7 @@ export default function Committee() {
     return "";
   };
   const effPriority = (m) => {
+    if (m.in_escalation === false) return null;
     if (m.priority != null && m.priority > 0) return m.priority;
     if (m.role === "Society Manager") return 1;
     if (m.role === "Secretary") return hasManager ? 2 : 1;
@@ -51,7 +53,7 @@ export default function Committee() {
     const match = COUNTRY_CODES.map((c) => c.dial).filter((d) => number.startsWith(d)).sort((a, b) => b.length - a.length)[0];
     if (match) { dial = match; number = number.slice(match.length); }
     setEditingId(m.id);
-    setForm({ name: m.name || "", role: m.role || "Member", tower: m.tower || "", dial, phone: number, email: m.email || "", priority: m.priority ?? "", acceptance_time_hours: m.acceptance_time_hours ?? 2 });
+    setForm({ name: m.name || "", role: m.role || "Member", tower: m.tower || "", dial, phone: number, email: m.email || "", priority: m.priority ?? "", acceptance_time_hours: m.acceptance_time_hours ?? 2, in_escalation: m.in_escalation !== false });
     setOpen(true);
   };
 
@@ -62,6 +64,7 @@ export default function Committee() {
       phone: form.phone ? form.dial + form.phone.replace(/\D/g, "") : "",
       priority: form.role === "Member" ? null : (form.priority === "" ? null : Number(form.priority)),
       acceptance_time_hours: Number(form.acceptance_time_hours) || 2,
+      in_escalation: form.in_escalation,
     };
     try {
       if (editingId) await api.put(`/society/committee/${editingId}`, payload, cfg);
@@ -72,7 +75,7 @@ export default function Committee() {
   };
   const del = async (m) => { try { await api.delete(`/society/committee/${m.id}`); reload(); toast.success("Removed"); } catch (e) { toast.error(apiError(e)); } };
   const roleColor = (r) => ROLE_COLOR[r] || ["#f1f5f9", "#475569", "#e2e8f0"];
-  const showPriority = form.role !== "Member";
+  const showPriority = form.role !== "Member" && form.in_escalation;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="committee-page">
@@ -87,6 +90,13 @@ export default function Committee() {
             <div><Label className="text-xs">Name</Label><Input data-testid="committee-name-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
             <div><Label className="text-xs">Role</Label>
               <Select value={form.role} onValueChange={onRole}><SelectTrigger data-testid="committee-role-select" className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select>
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-slate-50 p-3">
+              <div>
+                <Label className="text-xs font-semibold">Part of escalation matrix</Label>
+                <p className="mt-0.5 text-[10px] text-zinc-500">When off, this person never gets tickets assigned, escalations or alerts.</p>
+              </div>
+              <Switch data-testid="committee-escalation-switch" checked={form.in_escalation} onCheckedChange={(v) => setForm({ ...form, in_escalation: v })} />
             </div>
             {showPriority && (
               <div className="grid grid-cols-2 gap-3">
@@ -132,6 +142,7 @@ export default function Committee() {
                       <div>
                         <div className="text-[15px] font-bold text-slate-900">{m.name}</div>
                         <span className="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: bg, color: fg, border: `1px solid ${br}` }}>{m.role}</span>
+                        <span data-testid={`committee-escalation-badge-${m.id}`} className={`ml-1.5 mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${m.in_escalation === false ? "bg-slate-100 text-slate-500" : "bg-emerald-50 text-emerald-700"}`}>{m.in_escalation === false ? "Not in escalation" : "In escalation"}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">

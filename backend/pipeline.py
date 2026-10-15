@@ -194,6 +194,8 @@ async def assign_to_manager(ticket: dict, reason: str = ""):
 
 
 def _eff_priority(member: dict, has_manager: bool):
+    if member.get("in_escalation") is False:
+        return None
     p = member.get("priority")
     if isinstance(p, (int, float)) and p and p > 0:
         return int(p)
@@ -207,7 +209,7 @@ def _eff_priority(member: dict, has_manager: bool):
 
 async def _committee_chain(society_id: str):
     members = await db.committee.find({"society_id": society_id}).to_list(200)
-    has_manager = any(m.get("role") == "Society Manager" for m in members)
+    has_manager = any(m.get("role") == "Society Manager" and m.get("in_escalation") is not False for m in members)
     chain = []
     for m in members:
         ep = _eff_priority(m, has_manager)

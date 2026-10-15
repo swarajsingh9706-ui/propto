@@ -575,6 +575,7 @@ async def create_committee(body: dict, society_id: str = None, user: dict = Depe
            "role": role, "tower": (body.get("tower") or "").strip(),
            "phone": (body.get("phone") or "").strip(), "email": (body.get("email") or "").strip(),
            "priority": priority, "acceptance_time_hours": acc,
+           "in_escalation": body.get("in_escalation", True) is not False,
            "created_at": now_iso()}
     if not doc["name"]:
         raise HTTPException(status_code=400, detail="Member name required")
@@ -599,6 +600,8 @@ async def update_committee(cid: str, body: dict, user: dict = Depends(require_so
             upd["acceptance_time_hours"] = float(body.get("acceptance_time_hours") or 2)
         except (TypeError, ValueError):
             upd["acceptance_time_hours"] = 2.0
+    if "in_escalation" in body:
+        upd["in_escalation"] = body.get("in_escalation") is not False
     if upd.get("role") == "Member":
         upd["priority"] = None
     await db.committee.update_one({"_id": ObjectId(cid)}, {"$set": upd})

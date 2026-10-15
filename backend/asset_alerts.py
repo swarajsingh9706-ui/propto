@@ -18,7 +18,7 @@ def _parse(s):
 
 
 async def _manager_phone(sid: str):
-    m = await db.committee.find_one({"society_id": sid, "role": {"$in": MANAGER_ROLES}})
+    m = await db.committee.find_one({"society_id": sid, "role": {"$in": MANAGER_ROLES}, "in_escalation": {"$ne": False}})
     return (m or {}).get("phone")
 
 
