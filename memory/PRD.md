@@ -463,4 +463,12 @@ ENV NOTE: preview frontend REACT_APP_BACKEND_URL=api.propto.app is the deployed 
 - Verified: API create/update persists the flag, the chain excludes/includes the member accordingly (test member deleted), and the UI toggle hides the priority fields.
 
 
+## Vendor job details + vendor link + resolution OTP (2026-10-15)
+- `assign_vendor` generates a secret `vendor_token` for each assignment. It sends a detailed job text (society, category/issue, priority/SLA, full complaint, flat/location, resident name/phone, reported time, respond-by, link `PUBLIC_APP_URL/v/<token>`) and then the Accept/Reject buttons.
+- Vendor accept (idempotent; ignored if already accepted or closed) issues a 6-digit OTP (stored as a sha256 hash) and sends it to the resident (fallback: top committee member).
+- Vendor resolve needs the OTP, both on the `/v/<token>` page (`GET/POST /api/public/vendor/{token}[/resolve]`) and by WhatsApp "DONE 123456". Locked after 5 wrong tries (atomic counter; re-accept doesn't reset it). Notifications are fire-and-forget.
+- Admin/committee/resident flows are unchanged (no OTP).
+- Tests: iteration_11 (14/14 backend, all frontend states). The edge issues it found were fixed and re-verified with `tests/vendor_otp_edge_probe.py`.
+
+
 

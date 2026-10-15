@@ -1,0 +1,41 @@
+{
+  "summary": "Tested the vendor job link (/v/<token>) and the resolution-OTP feature. Backend: 14/14 pytest pass (tests/test_vendor_link_otp.py). It covers the public vendor GET/resolve endpoints over HTTP on the preview URL (invalid token 404, vendor_id null 404, full details, can_resolve logic, not-accepted 400, resolved 400, wrong OTP countdown, lock after 5 with the correct OTP also rejected, correct OTP -> Resolved/resolved_via='vendor link'/timeline/hash cleared, legacy no-hash ticket issues a new OTP, missing otp 422). It also runs direct python tests with wa mocked: the assign_vendor job text has every required field plus the /v/<token> link, sent before the Accept/Reject buttons; the new token makes the old link 404 and resets the hash and attempts. WhatsApp accept stores sha256(tid:otp) and the customer message holds the matching OTP. WhatsApp resolve without an OTP or with a wrong OTP does not resolve; the correct OTP resolves. _handle_direct_reply 'DONE 000000' and 'done' do not resolve; 'Done 123456' resolves. Admin close regression is OTP-free. Frontend on the preview URL at mobile 390px: all states render (card fields, accept-note, resolve-box, OTP error 'Incorrect OTP. 4 attempt(s) left.', locked, resolved-note, invalid). The correct OTP resolves through the UI. The resident page /t/<ticket_number> still renders. Found 2 logic loopholes and 1 latency issue (below).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "routers/whatsapp_router._vendor_action(action='accept')", "issue": "OTP lock bypass: tapping Accept again (or replying 'accept') re-runs issue_resolve_otp, which resets otp_attempts to 0 and sends a new OTP. A vendor locked after 5 wrong tries can unlock themselves and keep brute-forcing. Reproduced: attempts 5 -> 0 after accept (tests/vendor_otp_edge_probe.py).", "priority": "HIGH"},
+      {"endpoint": "routers/whatsapp_router._vendor_action(action='accept')", "issue": "Accept has no status or already-accepted guard. Accept on a Resolved ticket (an old WhatsApp button tap) sets the status back to Pending and issues/sends a new OTP to the resident. Reproduced: Resolved -> Pending. Accept should be idempotent: if already accepted or the status is not Open/Pending, just ack and return.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/public/vendor/{token}/resolve", "issue": "Responds in about 8s on a correct OTP. pipeline.resolve_by_vendor awaits wa.send_text to the group and the customer inline instead of pipeline._fire(...). The DB updates at once, but the vendor sees a spinner for 8-16s, and a slow Whapi call can push the response past proxy timeouts. Use _fire for the notifications (same for send_otp in the legacy no-hash branch)."},
+      {"endpoint": "pipeline.verify_resolve_otp", "issue": "The attempts check and the $inc are not atomic. Parallel requests can go past 5 tries. Use find_one_and_update with {otp_attempts: {$lt: 5}} plus $inc."},
+      {"endpoint": "POST /api/public/vendor/{token}/resolve", "issue": "A Resolved/Cancelled ticket returns 'This job can only be resolved after you accept it.', which is misleading. Return a status-specific message."},
+      {"endpoint": "_vendor_action", "issue": "Pre-existing: does not check that the sender phone matches the assigned vendor (button id has only tid)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Vendor resolve via link", "issue": "After a correct OTP the button spinner runs for about 8s before vendor-resolved-note appears (backend latency above).", "affected_selectors": ["[data-testid='vendor-resolve-btn']", "[data-testid='vendor-resolved-note']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_vendor_link_otp.py", "/app/backend/tests/vendor_otp_edge_probe.py", "/app/backend/tests/seed_vendor_ui.py", "/app/test_reports/pytest/pytest_vendor_otp.xml"],
+  "action_items": [
+    "Make WhatsApp accept idempotent: if the ticket is already vendor_accepted or not Open/Pending, do not reset otp_attempts, re-issue the OTP or change the status.",
+    "Never reset otp_attempts once locked (only an admin should unlock).",
+    "Send resolve_by_vendor notifications (and send_otp in the legacy branch) through pipeline._fire so /resolve returns at once.",
+    "Make the verify_resolve_otp attempt increment atomic.",
+    "Return a clearer error for already Resolved/Cancelled tickets on /resolve."
+  ],
+  "critical_code_review_comments": [
+    "Lock bypass via re-accept (see backend critical).",
+    "resolve_by_vendor sends WhatsApp messages inline and blocks the HTTP response.",
+    "frontend/.env REACT_APP_BACKEND_URL=https://api.propto.app (production), but the preview build calls the preview origin, so preview tests are fine. Note that api.propto.app does not yet have /api/public/vendor routes (returns generic 404) until deployed."
+  ],
+  "updated_files": ["/app/backend/tests/test_vendor_link_otp.py", "/app/backend/tests/vendor_otp_edge_probe.py", "/app/backend/tests/seed_vendor_ui.py"],
+  "success_rate": {"backend": "100% of feature tests (14/14); 2 edge-case logic bugs found by probe", "frontend": "100% (all vendor page states + resolve flow work; slow resolve response)"},
+  "seed_data_creation": "TEST_ tickets/vendors created and fully cleaned up (0 remaining). Run `python tests/seed_vendor_ui.py` to seed UI tokens testtok_ui_{acc,na,lock,res} (OTP 123456) and `python tests/seed_vendor_ui.py clean` to remove them.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_vendor_link_otp.py -n 0 -v (uses the preview URL https://complaint-whatsapp.preview.emergentagent.com and local Mongo; it mocks wa in the direct tests). Re-run tests/vendor_otp_edge_probe.py after the fix: expected 'attempts=5' to remain 5 and Resolved to remain Resolved after accept. The InputOTP data-testid sits on the hidden input: click it, then use keyboard.type."
+}

@@ -200,11 +200,13 @@ async def vendor_ticket_view(vtoken: str):
 @router.post("/vendor/{vtoken}/resolve")
 async def vendor_ticket_resolve(vtoken: str, body: VendorResolve):
     t = await _ticket_by_vendor_token(vtoken)
-    if t.get("status") not in ("Open", "Pending") or not t.get("vendor_accepted"):
+    if t.get("status") in ("Resolved", "Cancelled"):
+        raise HTTPException(status_code=400, detail=f"This ticket is already {t['status'].lower()}.")
+    if not t.get("vendor_accepted"):
         raise HTTPException(status_code=400, detail="This job can only be resolved after you accept it.")
     if not t.get("resolve_otp_hash"):
         code = await pipeline.issue_resolve_otp(t)
-        await pipeline.send_otp(t, code)
+        pipeline._fire(pipeline.send_otp(t, code))
         raise HTTPException(status_code=400, detail="A new OTP has been sent to the resident. Please enter it.")
     ok, msg = await pipeline.verify_resolve_otp(t, body.otp)
     if not ok:

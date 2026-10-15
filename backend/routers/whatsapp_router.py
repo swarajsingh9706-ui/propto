@@ -118,6 +118,10 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str, otp
     cat = ticket.get("category")
 
     if action == "accept":
+        if ticket.get("vendor_accepted") or ticket.get("status") not in ("Open", "Pending"):
+            state = "accepted" if ticket.get("vendor_accepted") else (ticket.get("status") or "closed").lower()
+            await _ack(phone, f"{num} is already {state} — no action needed.")
+            return
         await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Pending", "vendor_accepted": True, "response_due_at": None, "updated_at": now_iso()}})
         await pipeline.add_timeline(tid, "Vendor Accepted", f"{vname} accepted the job")
         await audit.log(society_id, "vendor_accepted", f"{vname} accepted {num} ({cat} · Flat {flat}) via WhatsApp", actor=vname, category="vendor", ticket_number=num)

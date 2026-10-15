@@ -219,8 +219,10 @@ def _otp_hash(tid: str, otp: str) -> str:
 async def issue_resolve_otp(ticket: dict) -> str:
     """Create (and store hashed) the 6-digit OTP the resident shares with the vendor on completion."""
     otp = f"{secrets.randbelow(10 ** 6):06d}"
-    await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {
-        "resolve_otp_hash": _otp_hash(str(ticket["_id"]), otp), "otp_attempts": 0, "otp_issued_at": now_iso()}})
+    upd = {"resolve_otp_hash": _otp_hash(str(ticket["_id"]), otp), "otp_issued_at": now_iso()}
+    if (ticket.get("otp_attempts") or 0) < 5:
+        upd["otp_attempts"] = 0
+    await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": upd})
     return otp
 
 
@@ -240,12 +242,17 @@ async def send_otp(ticket: dict, otp: str):
 
 
 async def verify_resolve_otp(ticket: dict, otp: str):
+    locked = "Too many wrong OTP attempts — resolving is locked. Please contact the society manager."
     if (ticket.get("otp_attempts") or 0) >= 5:
-        return False, "Too many wrong OTP attempts — resolving is locked. Please contact the society manager."
+        return False, locked
     if ticket.get("resolve_otp_hash") and _otp_hash(str(ticket["_id"]), (otp or "").strip()) == ticket["resolve_otp_hash"]:
         return True, ""
-    await db.tickets.update_one({"_id": ticket["_id"]}, {"$inc": {"otp_attempts": 1}})
-    left = 4 - (ticket.get("otp_attempts") or 0)
+    upd = await db.tickets.find_one_and_update(
+        {"_id": ticket["_id"], "otp_attempts": {"$not": {"$gte": 5}}}, {"$inc": {"otp_attempts": 1}},
+        return_document=True)
+    if not upd:
+        return False, locked
+    left = 5 - (upd.get("otp_attempts") or 0)
     return False, f"Incorrect OTP. {left} attempt(s) left." if left > 0 else "Incorrect OTP. Resolving is now locked."
 
 
@@ -261,10 +268,10 @@ async def resolve_by_vendor(ticket: dict, vname: str, via: str):
     gid = await _society_group(ticket["society_id"])
     msg = f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}. Thank you!"
     if gid:
-        await wa.send_text(gid, msg, reply_to=ticket.get("source_message_id"))
+        _fire(wa.send_text(gid, msg, reply_to=ticket.get("source_message_id")))
     cust = ticket.get("reporter_phone") or ticket.get("resident_phone")
     if cust:
-        await wa.send_text(cust, msg)
+        _fire(wa.send_text(cust, msg))
 
 
 async def _society_group(society_id: str):
