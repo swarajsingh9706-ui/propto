@@ -1,6 +1,8 @@
 import os
 import re
 import uuid
+import hashlib
+import secrets
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
@@ -154,23 +156,115 @@ async def assign_vendor(ticket: dict, vendor: dict, actor: str = "AI (auto-route
         rt = 2.0
     now = datetime.now(timezone.utc)
     response_due = (now + timedelta(hours=rt)).isoformat()
+    vtoken = secrets.token_urlsafe(16)
     await db.tickets.update_one(
         {"_id": ObjectId(tid)},
         {"$set": {"vendor_id": str(vendor["_id"]), "vendor_name": vendor["name"],
                   "status": "Pending", "assigned_to": None, "vendor_accepted": False,
                   "vendor_assigned_at": now.isoformat(), "response_due_at": response_due,
+                  "vendor_token": vtoken, "resolve_otp_hash": None, "otp_attempts": 0,
                   "updated_at": now_iso()}},
     )
     await add_timeline(tid, "Vendor Assigned", f"{vendor['name']} assigned (respond within {rt:g}h)")
     await audit.log(ticket.get("society_id"), "vendor_assigned",
                     f"{vendor['name']} assigned to {ticket.get('ticket_number')} ({ticket.get('category')})",
                     actor=actor, category="vendor", ticket_number=ticket.get("ticket_number"))
-    _fire(wa.send_buttons(
-        vendor["phone"],
-        f"New job: {ticket['category']} at Flat {ticket.get('flat','?')} ({ticket['priority']} priority). {ticket['description']}",
-        [{"id": f"vendor_accept_{tid}", "title": "Accept"},
-         {"id": f"vendor_reject_{tid}", "title": "Reject"}],
-    ))
+    _fire(_send_vendor_job(ticket, vendor, tid, rt, response_due, vtoken))
+
+
+def vendor_link(vtoken: str) -> str:
+    base = os.environ.get("PUBLIC_APP_URL")
+    return f"{base.rstrip('/')}/v/{vtoken}" if base and vtoken else ""
+
+
+def _fmt_time(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso).astimezone(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p")
+    except (TypeError, ValueError):
+        return iso or "—"
+
+
+async def _send_vendor_job(ticket: dict, vendor: dict, tid: str, rt: float, response_due: str, vtoken: str):
+    soc = await db.societies.find_one({"_id": ObjectId(ticket["society_id"])})
+    num = ticket.get("ticket_number")
+    issue = ticket.get("sub_category") or ticket.get("matched_situation") or ""
+    flat = " ".join(x for x in [ticket.get("tower"), ticket.get("flat")] if x) or "—"
+    lines = [
+        f"🛠️ *New job assigned — {num}*",
+        f"Society: {(soc or {}).get('name') or '—'}",
+        f"Category: {ticket.get('category')}" + (f" · {issue}" if issue else ""),
+        f"Priority: {ticket.get('priority')}" + (f" (target {ticket['sla_target']})" if ticket.get("sla_target") else ""),
+        "",
+        f"Complaint: {(ticket.get('raw_message') or ticket.get('description') or '')[:600]}",
+        "",
+        f"Flat: {flat}" + (f"  |  Location: {ticket['location']}" if ticket.get("location") else ""),
+        f"Resident: {ticket.get('resident_name') or 'Unknown'}",
+        f"Phone: {ticket.get('reporter_phone') or ticket.get('resident_phone') or '—'}",
+        f"Reported: {_fmt_time(ticket.get('created_at'))}",
+        f"Respond by: {_fmt_time(response_due)} ({rt:g}h)",
+    ]
+    link = vendor_link(vtoken)
+    if link:
+        lines += ["", f"📋 View full ticket: {link}"]
+    await wa.send_text(vendor["phone"], "\n".join(lines))
+    await wa.send_buttons(vendor["phone"], f"Do you accept job {num}?",
+                          [{"id": f"vendor_accept_{tid}", "title": "Accept"},
+                           {"id": f"vendor_reject_{tid}", "title": "Reject"}])
+
+
+def _otp_hash(tid: str, otp: str) -> str:
+    return hashlib.sha256(f"{tid}:{otp}".encode()).hexdigest()
+
+
+async def issue_resolve_otp(ticket: dict) -> str:
+    """Create (and store hashed) the 6-digit OTP the resident shares with the vendor on completion."""
+    otp = f"{secrets.randbelow(10 ** 6):06d}"
+    await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {
+        "resolve_otp_hash": _otp_hash(str(ticket["_id"]), otp), "otp_attempts": 0, "otp_issued_at": now_iso()}})
+    return otp
+
+
+def otp_text(ticket: dict, otp: str) -> str:
+    return (f"🔐 Resolution OTP for {ticket.get('ticket_number')}: *{otp}*\n"
+            f"Share it with {ticket.get('vendor_name') or 'the vendor'} ONLY after the work is completed to your satisfaction.")
+
+
+async def send_otp(ticket: dict, otp: str):
+    """Send the OTP to the resident; fall back to the top committee member if no resident phone."""
+    to = ticket.get("reporter_phone") or ticket.get("resident_phone")
+    if not to:
+        chain = await _committee_chain(ticket["society_id"])
+        to = chain[0][1].get("phone") if chain else None
+    if to:
+        await wa.send_text(to, otp_text(ticket, otp))
+
+
+async def verify_resolve_otp(ticket: dict, otp: str):
+    if (ticket.get("otp_attempts") or 0) >= 5:
+        return False, "Too many wrong OTP attempts — resolving is locked. Please contact the society manager."
+    if ticket.get("resolve_otp_hash") and _otp_hash(str(ticket["_id"]), (otp or "").strip()) == ticket["resolve_otp_hash"]:
+        return True, ""
+    await db.tickets.update_one({"_id": ticket["_id"]}, {"$inc": {"otp_attempts": 1}})
+    left = 4 - (ticket.get("otp_attempts") or 0)
+    return False, f"Incorrect OTP. {left} attempt(s) left." if left > 0 else "Incorrect OTP. Resolving is now locked."
+
+
+async def resolve_by_vendor(ticket: dict, vname: str, via: str):
+    tid, num = str(ticket["_id"]), ticket.get("ticket_number")
+    cat, flat = ticket.get("category"), ticket.get("flat") or "—"
+    await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {
+        "status": "Resolved", "response_due_at": None, "resolve_otp_hash": None, "resolved_at": now_iso(),
+        "resolved_via": via, "updated_at": now_iso()}})
+    await add_timeline(tid, "Marked Resolved", f"Resolved by {vname} via {via} (OTP verified)")
+    await audit.log(ticket.get("society_id"), "ticket_resolved", f"{num} ({cat} · Flat {flat}) resolved by {vname} via {via} (OTP verified)",
+                    actor=vname, category="ticket", ticket_number=num)
+    gid = await _society_group(ticket["society_id"])
+    msg = f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}. Thank you!"
+    if gid:
+        await wa.send_text(gid, msg, reply_to=ticket.get("source_message_id"))
+    cust = ticket.get("reporter_phone") or ticket.get("resident_phone")
+    if cust:
+        await wa.send_text(cust, msg)
 
 
 async def _society_group(society_id: str):

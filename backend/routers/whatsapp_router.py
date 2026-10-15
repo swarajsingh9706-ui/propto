@@ -104,7 +104,7 @@ async def _group_chat_id(society_id: str):
     return ((soc or {}).get("whatsapp_group") or {}).get("chat_id")
 
 
-async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
+async def _vendor_action(society_id: str, phone: str, tid: str, action: str, otp: str = None):
     try:
         ticket = await db.tickets.find_one({"_id": ObjectId(tid)})
     except Exception:
@@ -126,6 +126,7 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
         rname = ticket.get("resident_name") or "Resident"
         rphone = ticket.get("reporter_phone") or ticket.get("resident_phone") or "—"
         # 1) Confirm to the vendor + share the complaint raiser's details
+        link = pipeline.vendor_link(ticket.get("vendor_token"))
         await _ack(phone,
                    f"👍 You've *accepted* {num} ({cat}).\n"
                    f"Raised by: {rname}\n"
@@ -133,7 +134,9 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
                    f"Flat: {flat}\n"
                    f"Society: {soc_name}\n"
                    f"Issue: {ticket.get('description') or cat}\n\n"
-                   f"Please visit and reply *DONE* once resolved.")
+                   f"The resident has received a resolution OTP. Once the work is done, ask them for it and "
+                   f"reply *DONE <OTP>*" + (f" or resolve here: {link}" if link else "") + ".")
+        otp_code = await pipeline.issue_resolve_otp(ticket)
         # 2) Send the vendor's contact to the customer personally
         vendor = None
         if ticket.get("vendor_id"):
@@ -146,7 +149,10 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
             await _ack(cust,
                        f"✅ Good news! Your complaint {num} ({cat} · Flat {flat}) has been accepted by *{vname}*.\n"
                        f"Vendor contact: {(vendor or {}).get('phone') or '—'}\n"
-                       f"They'll reach out shortly — feel free to coordinate directly.")
+                       f"They'll reach out shortly — feel free to coordinate directly.\n\n"
+                       + pipeline.otp_text({**ticket, "vendor_name": vname}, otp_code))
+        else:
+            await pipeline.send_otp({**ticket, "vendor_name": vname}, otp_code)
 
     elif action == "reject":
         await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"vendor_id": None, "vendor_name": None, "status": "Open", "vendor_accepted": False, "response_due_at": None, "updated_at": now_iso()}})
@@ -165,16 +171,23 @@ async def _vendor_action(society_id: str, phone: str, tid: str, action: str):
             await pipeline.escalate_to_committee(fresh, after_priority=0, reason="No other vendor available after rejection")
 
     elif action == "resolve":
-        await db.tickets.update_one({"_id": ticket["_id"]}, {"$set": {"status": "Resolved", "response_due_at": None, "updated_at": now_iso()}})
-        await pipeline.add_timeline(tid, "Marked Resolved", f"Resolved by {vname}")
-        await audit.log(society_id, "ticket_resolved", f"{num} ({cat} · Flat {flat}) marked resolved by {vname} via WhatsApp", actor=vname, category="ticket", ticket_number=num)
-        await _ack(phone, f"✅ Marked {num} as *resolved*. Thank you!")
-        # Resolved confirmation goes to the GROUP (quoting the original complaint)
-        gid = await _group_chat_id(society_id)
-        if gid:
-            await wa.send_text(gid, f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}. Thank you!", reply_to=ticket.get("source_message_id"))
-        elif ticket.get("resident_phone"):
-            await wa.send_text(ticket["resident_phone"], f"✅ {num} ({cat} · Flat {flat}) has been resolved by {vname}.")
+        if not ticket.get("vendor_accepted") or ticket.get("status") not in ("Open", "Pending"):
+            await _ack(phone, f"{num} can't be resolved right now — please accept the job first.")
+            return
+        if not ticket.get("resolve_otp_hash"):
+            code = await pipeline.issue_resolve_otp(ticket)
+            await pipeline.send_otp(ticket, code)
+            await _ack(phone, f"An OTP for {num} has been sent to the resident. Ask them for it and reply *DONE <OTP>*.")
+            return
+        if not otp:
+            await _ack(phone, f"To resolve {num}, reply *DONE <OTP>* with the 6-digit OTP the resident received.")
+            return
+        ok, msg = await pipeline.verify_resolve_otp(ticket, otp)
+        if not ok:
+            await _ack(phone, f"❌ {msg}")
+            return
+        await pipeline.resolve_by_vendor(ticket, vname, "WhatsApp")
+        await _ack(phone, f"✅ OTP verified. Marked {num} as *resolved*. Thank you!")
 
 
 async def _apply_poll_results(m: dict, create_if_missing: bool = False):
@@ -521,8 +534,9 @@ async def _handle_direct_reply(society_id: str, phone: str, text: str):
                 await _vendor_action(society_id, phone, tid, "accept"); return
             if "reject" in t or "decline" in t:
                 await _vendor_action(society_id, phone, tid, "reject"); return
-            if "resolve" in t or t == "done" or "complete" in t or "finished" in t:
-                await _vendor_action(society_id, phone, tid, "resolve"); return
+            if "resolve" in t or t.startswith("done") or "complete" in t or "finished" in t:
+                m = re.search(r"\b(\d{6})\b", t)
+                await _vendor_action(society_id, phone, tid, "resolve", otp=m.group(1) if m else None); return
     member = await db.committee.find_one({"society_id": society_id, "phone": {"$regex": phone[-10:] + "$"}})
     if member:
         job = await db.tickets.find_one({"committee_assignee_id": str(member["_id"]), "status": {"$in": ["Open", "Pending"]}}, sort=[("updated_at", -1)])

@@ -27,6 +27,7 @@ import Reports from "@/pages/society/Reports";
 import ChangePassword from "@/pages/society/ChangePassword";
 import Join from "@/pages/public/Join";
 import TicketView from "@/pages/public/TicketView";
+import VendorTicketView from "@/pages/public/VendorTicketView";
 
 function Protected({ children }) {
   const { user } = useAuth();
@@ -58,6 +59,7 @@ function App() {
             <Route path="/admin/login" element={<SuperAdminLogin />} />
             <Route path="/join/:token" element={<Join />} />
             <Route path="/t/:token" element={<TicketView />} />
+            <Route path="/v/:token" element={<VendorTicketView />} />
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/super/dashboard" element={<Protected><SuperDashboard /></Protected>} />
             <Route path="/super/societies" element={<Protected><Societies /></Protected>} />

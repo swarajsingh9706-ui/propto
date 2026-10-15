@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from bson import ObjectId
 import logging
 
@@ -160,3 +161,53 @@ async def _notify_prev_vendor(prev_vid, tnum, ticket):
             await wa.send_text(v["phone"], f"ℹ️ Ticket {tnum} ({ticket.get('category') or 'Issue'} · Flat {ticket.get('flat') or '—'}) has been reassigned. No action is required from you.")
     except Exception as e:
         logger.warning("prev vendor notice failed: %s", e)
+
+
+
+# ---------- Vendor job page (secret per-assignment token) ----------
+class VendorResolve(BaseModel):
+    otp: str
+
+
+async def _ticket_by_vendor_token(vtoken: str):
+    t = await db.tickets.find_one({"vendor_token": vtoken}) if vtoken else None
+    if not t or not t.get("vendor_id"):
+        raise HTTPException(status_code=404, detail="This job link is invalid or no longer assigned to you.")
+    return t
+
+
+@router.get("/vendor/{vtoken}")
+async def vendor_ticket_view(vtoken: str):
+    t = await _ticket_by_vendor_token(vtoken)
+    soc = await db.societies.find_one({"_id": ObjectId(t["society_id"])})
+    status = t.get("status")
+    active = status in ("Open", "Pending")
+    return {
+        "ticket_number": t.get("ticket_number"), "society_name": (soc or {}).get("name") or "",
+        "description": t.get("description") or "", "raw_message": t.get("raw_message") or "",
+        "category": t.get("category") or "", "sub_category": t.get("sub_category") or "",
+        "issue_line": t.get("matched_situation") or "", "priority": t.get("priority") or "",
+        "sla_target": t.get("sla_target") or "", "flat": t.get("flat") or "", "tower": t.get("tower") or "",
+        "location": t.get("location") or "", "resident_name": t.get("resident_name") or "",
+        "resident_phone": t.get("reporter_phone") or t.get("resident_phone") or "",
+        "status": status, "vendor_name": t.get("vendor_name") or "", "vendor_accepted": bool(t.get("vendor_accepted")),
+        "created_at": t.get("created_at"), "response_due_at": t.get("response_due_at"),
+        "can_resolve": active and bool(t.get("vendor_accepted")),
+        "otp_locked": (t.get("otp_attempts") or 0) >= 5,
+    }
+
+
+@router.post("/vendor/{vtoken}/resolve")
+async def vendor_ticket_resolve(vtoken: str, body: VendorResolve):
+    t = await _ticket_by_vendor_token(vtoken)
+    if t.get("status") not in ("Open", "Pending") or not t.get("vendor_accepted"):
+        raise HTTPException(status_code=400, detail="This job can only be resolved after you accept it.")
+    if not t.get("resolve_otp_hash"):
+        code = await pipeline.issue_resolve_otp(t)
+        await pipeline.send_otp(t, code)
+        raise HTTPException(status_code=400, detail="A new OTP has been sent to the resident. Please enter it.")
+    ok, msg = await pipeline.verify_resolve_otp(t, body.otp)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    await pipeline.resolve_by_vendor(t, t.get("vendor_name") or "Vendor", "vendor link")
+    return {"status": "Resolved"}
